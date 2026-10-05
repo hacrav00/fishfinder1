@@ -1,0 +1,16 @@
+[Unit]
+Description=FishFinder Robotic Arm & Servo Control Server
+After=network.target
+
+[Service]
+Type=simple
+User=i4mt
+WorkingDirectory=/home/i4mt
+ExecStart=/usr/bin/python3 /home/i4mt/arm_server.py
+Restart=always
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
