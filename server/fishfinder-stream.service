@@ -1,0 +1,13 @@
+[Unit]
+Description=FishFinder Ultra-Low Latency Camera Stream (ustreamer)
+After=network.target
+
+[Service]
+Type=simple
+User=i4mt
+ExecStart=/usr/bin/ustreamer --device=/dev/video0 --format=MJPEG --resolution=1280x720 --desired-fps=30 --host=0.0.0.0 --port=8000 --workers=3 --tcp-nodelay --buffers=2 --drop-same-frames=30
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
