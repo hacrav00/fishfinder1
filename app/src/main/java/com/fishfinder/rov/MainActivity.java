@@ -31,18 +31,22 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Keep screen awake while piloting ROV
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        hideSystemUI();
+        try {
+            // Keep screen awake while piloting ROV
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            setContentView(R.layout.activity_main);
 
-        webView = new WebView(this);
-        setContentView(webView);
-
-        configureWebView();
-        webView.loadUrl(LOCAL_URL);
+            webView = findViewById(R.id.webview);
+            configureWebView();
+            webView.loadUrl(LOCAL_URL);
+        } catch (Exception e) {
+            Toast.makeText(this, "Init Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     private void configureWebView() {
+        if (webView == null) return;
+
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -50,8 +54,6 @@ public class MainActivity extends AppCompatActivity {
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
-        settings.setAllowFileAccessFromFileURLs(true);
-        settings.setAllowUniversalAccessFromFileURLs(true);
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
@@ -63,7 +65,7 @@ public class MainActivity extends AppCompatActivity {
         // Native JS Bridge
         webView.addJavascriptInterface(new WebAppInterface(this), "AndroidBridge");
 
-        // Custom Chrome Client
+        // WebChromeClient for console/dialog handling
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onConsoleMessage(ConsoleMessage cm) {
@@ -71,7 +73,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // WebViewClient to keep all navigation in-app
+        // WebViewClient to keep navigation in-app
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
@@ -106,21 +108,31 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void hideSystemUI() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            final WindowInsetsController insetsController = getWindow().getInsetsController();
-            if (insetsController != null) {
-                insetsController.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-                insetsController.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                final WindowInsetsController insetsController = getWindow().getInsetsController();
+                if (insetsController != null) {
+                    insetsController.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                    insetsController.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                }
+            } else {
+                getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                );
             }
-        } else {
-            getWindow().getDecorView().setSystemUiVisibility(
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                | View.SYSTEM_UI_FLAG_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            );
+        } catch (Exception ignored) {}
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            hideSystemUI();
         }
     }
 
