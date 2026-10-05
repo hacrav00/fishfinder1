@@ -25,31 +25,37 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Grant Execute Permission to Gradle
-        run: |
-          if [ -f gradlew ]; then chmod +x gradlew; fi
-
       - name: Build Debug APK
-        run: gradle assembleDebug
+        run: gradle assembleDebug --stacktrace
 
-      - name: Upload APK to Artifacts
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: FishFinder-ROV-App
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
-      - name: Create GitHub Release with APK
+      - name: Update GitHub Release v1.1.0
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
         with:
-          tag_name: v1.0.0
-          name: FishFinder ROV Mobile App v1.0.0
+          tag_name: v1.1.0
+          name: FishFinder ROV Mobile App v1.1.0
           body: |
-            ## FishFinder ROV Mobile App (Android APK)
-            - Touch Screen Swipe Controls for Camera Pan & Tilt
-            - Zero-Latency HD Camera Stream
-            - Full-Screen Immersive Landscape Mode
+            ## 🐟 FishFinder ROV Mobile App v1.1.0
+            
+            ### ✨ Features:
+            - **Complete Standalone App**: Bundled frontend assets with full offline support.
+            - **Modern AndroidX Foundation**: Stable on Android 8 through Android 15.
+            - **Touch Gestures on Live Feed**:
+              - Swipe Left / Right to Pan (auto-stop on release)
+              - Swipe Up / Down to Tilt
+            - **Laptop App Features**:
+              - 📸 Snapshot (Capture photo)
+              - 🎥 In-App Video Recording with timer
+              - 🌊 Underwater Mode (color correction)
+              - 🌙 Low Light / Night Boost
+              - 🎛️ Digital Zoom (1x to 3x), Brightness, Contrast & Saturation sliders
+              - 🕹️ Full D-Pad & Precision Sliders
+            - **Configurable Host IP**: Defaults to `192.168.0.131` with in-app changer.
           files: app/build/outputs/apk/debug/app-debug.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
