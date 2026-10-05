@@ -22,8 +22,10 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Gradle
+      - name: Setup Gradle 8.5
         uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
 
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace
@@ -44,18 +46,18 @@ jobs:
           body: |
             ## 🐟 FishFinder ROV Mobile App v1.1.0
             
-            ### ✨ Features:
-            - **Complete Standalone App**: Bundled frontend assets with full offline support.
+            ### ✨ Features Included:
+            - **Complete Standalone App**: Bundled offline frontend assets with instant zero-second launch.
             - **Modern AndroidX Foundation**: Stable on Android 8 through Android 15.
-            - **Touch Gestures on Live Feed**:
+            - **Touch Gestures on Live Video**:
               - Swipe Left / Right to Pan (auto-stop on release)
               - Swipe Up / Down to Tilt
             - **Laptop App Features**:
-              - 📸 Snapshot (Capture photo)
-              - 🎥 In-App Video Recording with timer
-              - 🌊 Underwater Mode (color correction)
+              - 📸 Snapshot (Capture photo directly to phone)
+              - 🎥 In-App Video Recording with live duration timer
+              - 🌊 Underwater Mode (color correction matrix)
               - 🌙 Low Light / Night Boost
               - 🎛️ Digital Zoom (1x to 3x), Brightness, Contrast & Saturation sliders
-              - 🕹️ Full D-Pad & Precision Sliders
+              - 🕹️ Full D-Pad & Precision Joystick Sliders
             - **Configurable Host IP**: Defaults to `192.168.0.131` with in-app changer.
           files: app/build/outputs/apk/debug/app-debug.apk
