@@ -1,0 +1,55 @@
+name: Build FishFinder Android APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Grant Execute Permission to Gradle
+        run: |
+          if [ -f gradlew ]; then chmod +x gradlew; fi
+
+      - name: Build Debug APK
+        run: gradle assembleDebug
+
+      - name: Upload APK to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FishFinder-ROV-App
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Create GitHub Release with APK
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: v1.0.0
+          name: FishFinder ROV Mobile App v1.0.0
+          body: |
+            ## FishFinder ROV Mobile App (Android APK)
+            - Touch Screen Swipe Controls for Camera Pan & Tilt
+            - Zero-Latency HD Camera Stream
+            - Full-Screen Immersive Landscape Mode
+          files: app/build/outputs/apk/debug/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
