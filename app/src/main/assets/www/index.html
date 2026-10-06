@@ -8,7 +8,7 @@
     :root {
       --bg: #090d16;
       --card-bg: #121824;
-      --panel-bg: rgba(18, 24, 36, 0.95);
+      --panel-bg: rgba(18, 24, 36, 0.96);
       --accent: #00d4aa;
       --accent-dark: #0f766e;
       --text: #e6edf3;
@@ -52,27 +52,27 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0 16px;
-      background: linear-gradient(180deg, rgba(9, 13, 22, 0.92) 0%, rgba(9, 13, 22, 0.4) 80%, transparent 100%);
+      padding: 0 12px;
+      background: linear-gradient(180deg, rgba(9, 13, 22, 0.94) 0%, rgba(9, 13, 22, 0.45) 80%, transparent 100%);
       z-index: 50;
       pointer-events: auto;
     }
     .header-left, .header-right {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
     .app-title {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
       color: var(--accent);
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       text-shadow: 0 2px 8px rgba(0,0,0,0.8);
     }
     .badge {
-      font-size: 11px;
+      font-size: 10px;
       padding: 3px 8px;
       border-radius: 12px;
       font-weight: 600;
@@ -92,10 +92,10 @@
       background: currentColor;
     }
     .btn-top {
-      background: rgba(22, 27, 34, 0.85);
+      background: rgba(22, 27, 34, 0.88);
       border: 1px solid var(--border);
       color: var(--text);
-      padding: 5px 10px;
+      padding: 5px 9px;
       border-radius: 6px;
       font-size: 11px;
       font-weight: 600;
@@ -108,6 +108,10 @@
     .btn-top:active {
       background: var(--accent);
       color: #000;
+    }
+    .btn-top.accent {
+      border-color: var(--accent);
+      color: var(--accent);
     }
 
     /* Video Viewport */
@@ -130,11 +134,32 @@
       object-fit: contain;
       pointer-events: none;
       transform-origin: center center;
-      transition: filter 0.2s ease;
+      transition: transform 0.12s ease-out, filter 0.2s ease;
     }
-    /* Hidden canvas used for snapshots and recordings */
     #capture-canvas {
       display: none;
+    }
+
+    /* Autofocus Reticle Box */
+    #af-reticle {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 96px;
+      height: 96px;
+      transform: translate(-50%, -50%);
+      border: 2px solid #facc15;
+      border-radius: 10px;
+      pointer-events: none;
+      z-index: 58;
+      box-shadow: 0 0 18px rgba(250, 204, 21, 0.55);
+      transition: all 0.2s ease;
+    }
+    #af-reticle::before, #af-reticle::after {
+      content: "";
+      position: absolute;
+      background: currentColor;
     }
 
     /* HUD Overlay Indicators */
@@ -144,12 +169,12 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: rgba(9, 13, 22, 0.88);
+      background: rgba(9, 13, 22, 0.9);
       color: var(--accent);
-      padding: 12px 24px;
+      padding: 10px 22px;
       border-radius: 14px;
       font-weight: 700;
-      font-size: 18px;
+      font-size: 16px;
       pointer-events: none;
       border: 2px solid var(--accent);
       z-index: 60;
@@ -176,12 +201,63 @@
       100% { opacity: 1; }
     }
 
+    /* Floating Left Zoom & Focus Bar */
+    #zoom-focus-bar {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: rgba(18, 24, 36, 0.82);
+      padding: 6px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      z-index: 50;
+      backdrop-filter: blur(8px);
+    }
+    .zf-btn {
+      background: rgba(33, 43, 61, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text);
+      border-radius: 8px;
+      width: 44px;
+      height: 38px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .zf-btn:active {
+      background: var(--accent);
+      color: #000;
+    }
+    .zf-btn.af-btn {
+      background: rgba(15, 118, 110, 0.88);
+      border-color: var(--accent);
+      color: #99f6e4;
+      height: 42px;
+    }
+    .zf-pill {
+      text-align: center;
+      font-size: 11px;
+      font-family: monospace;
+      font-weight: 700;
+      color: var(--blue);
+      padding: 2px 0;
+      cursor: pointer;
+    }
+
     /* Position & Telemetry HUD text */
     #hud-info {
       position: absolute;
-      bottom: 84px;
+      bottom: 82px;
       left: 16px;
-      background: rgba(9, 13, 22, 0.75);
+      background: rgba(9, 13, 22, 0.78);
       border: 1px solid rgba(255, 255, 255, 0.1);
       padding: 5px 10px;
       border-radius: 6px;
@@ -196,9 +272,9 @@
     }
     #hud-hint {
       position: absolute;
-      bottom: 84px;
+      bottom: 82px;
       right: 16px;
-      background: rgba(9, 13, 22, 0.75);
+      background: rgba(9, 13, 22, 0.78);
       border: 1px solid rgba(255, 255, 255, 0.1);
       padding: 5px 10px;
       border-radius: 6px;
@@ -219,35 +295,36 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0 16px;
-      background: linear-gradient(0deg, rgba(9, 13, 22, 0.95) 0%, rgba(9, 13, 22, 0.6) 80%, transparent 100%);
+      padding: 0 14px;
+      background: linear-gradient(0deg, rgba(9, 13, 22, 0.96) 0%, rgba(9, 13, 22, 0.65) 80%, transparent 100%);
       z-index: 50;
       pointer-events: auto;
     }
     .action-group {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 7px;
+      overflow-x: auto;
     }
     .btn-action {
-      background: rgba(18, 24, 36, 0.85);
+      background: rgba(18, 24, 36, 0.88);
       border: 1px solid var(--border);
       color: var(--text);
-      padding: 10px 14px;
+      padding: 8px 10px;
       border-radius: 8px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
       cursor: pointer;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 4px;
-      min-width: 58px;
+      gap: 3px;
+      min-width: 52px;
       backdrop-filter: blur(8px);
       transition: all 0.15s ease;
     }
     .btn-action span.icon {
-      font-size: 16px;
+      font-size: 15px;
     }
     .btn-action:active {
       transform: scale(0.94);
@@ -267,10 +344,10 @@
     /* D-Pad Floating Widget */
     .dpad-container {
       display: grid;
-      grid-template-columns: repeat(3, 40px);
-      grid-template-rows: repeat(3, 40px);
+      grid-template-columns: repeat(3, 38px);
+      grid-template-rows: repeat(3, 38px);
       gap: 4px;
-      background: rgba(18, 24, 36, 0.7);
+      background: rgba(18, 24, 36, 0.75);
       padding: 4px;
       border-radius: 12px;
       border: 1px solid var(--border);
@@ -341,7 +418,7 @@
     .drawer-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 16px;
+      gap: 14px;
     }
     @media (max-width: 600px) {
       .drawer-grid {
@@ -379,14 +456,16 @@
     .preset-row {
       display: flex;
       justify-content: space-between;
+      gap: 4px;
       font-size: 10px;
       color: var(--muted);
+      flex-wrap: wrap;
     }
     .preset-btn {
       background: rgba(33, 43, 61, 0.6);
       border: 1px solid var(--border);
       color: var(--text);
-      padding: 3px 6px;
+      padding: 4px 7px;
       border-radius: 4px;
       cursor: pointer;
     }
@@ -395,7 +474,7 @@
       color: #000;
     }
 
-    /* IP Settings Modal */
+    /* IP & Router Auto-Discovery Modal */
     #ip-modal {
       display: none;
       position: absolute;
@@ -403,7 +482,7 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0, 0, 0, 0.75);
+      background: rgba(0, 0, 0, 0.78);
       z-index: 120;
       align-items: center;
       justify-content: center;
@@ -413,15 +492,15 @@
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 20px;
-      width: 90%;
-      max-width: 360px;
+      padding: 18px;
+      width: 92%;
+      max-width: 400px;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9);
     }
     .ip-box h3 {
       font-size: 15px;
       color: var(--accent);
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
     .ip-input {
       width: 100%;
@@ -432,15 +511,21 @@
       color: #fff;
       font-family: monospace;
       font-size: 14px;
-      margin-bottom: 14px;
+      margin-bottom: 10px;
+    }
+    .router-presets {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 12px;
     }
     .ip-actions {
       display: flex;
-      justify-content: flex-end;
-      gap: 10px;
+      justify-content: space-between;
+      gap: 8px;
     }
     .btn-dialog {
-      padding: 8px 16px;
+      padding: 8px 14px;
       border-radius: 6px;
       font-size: 12px;
       font-weight: 600;
@@ -464,39 +549,64 @@
       <div class="app-title">🐟 <span>FishFinder ROV</span></div>
       <div id="badge-conn" class="badge badge-status connecting">
         <span class="status-dot"></span>
-        <span id="txt-conn">CONNECTING</span>
+        <span id="txt-conn">SCANNING</span>
       </div>
-      <div class="badge" id="txt-fps">-- FPS</div>
+      <div class="badge" id="txt-fps">30 FPS</div>
     </div>
     <div class="header-right">
-      <button class="btn-top" onclick="openIpModal()">🌐 <span id="btn-ip-lbl">192.168.0.131</span></button>
+      <button class="btn-top accent" onclick="autoDiscoverRov(true)">🔍 Auto-Find</button>
+      <button class="btn-top" onclick="openIpModal()">🌐 <span id="btn-ip-lbl">192.168.150.131</span></button>
       <button class="btn-top" onclick="recenterAll()">⨁ Center</button>
-      <button class="btn-top" onclick="toggleSettingsDrawer()">⚙️ Controls</button>
+      <button class="btn-top" onclick="toggleSettingsDrawer()">⚙️ Sliders</button>
     </div>
   </header>
 
   <!-- Live Camera Viewport -->
   <div id="viewport">
-    <img id="stream-img" src="" alt="Connecting to ROV Camera...">
+    <img id="stream-img" src="" alt="Searching for ROV Camera on Router...">
     <canvas id="capture-canvas"></canvas>
 
-    <!-- Indicators -->
+    <!-- Autofocus Reticle & Gesture Indicator -->
+    <div id="af-reticle"></div>
     <div id="hud-indicator">SWIPE</div>
     <div id="rec-indicator">● REC <span id="rec-timer">00:00</span></div>
-    
+
+    <!-- Dedicated Left Floating Autofocus & Zoom Controls -->
+    <div id="zoom-focus-bar">
+      <button class="zf-btn af-btn" onclick="triggerAutofocus()">
+        <span>🎯</span>
+        <span style="font-size:9px;">AF</span>
+      </button>
+      <button class="zf-btn" onclick="stepZoom(0.5)">🔍+</button>
+      <div class="zf-pill" id="hud-zoom-pill" onclick="setZoom(1.0)">1.0x</div>
+      <button class="zf-btn" onclick="stepZoom(-0.5)">🔍-</button>
+    </div>
+
     <!-- Position HUD -->
     <div id="hud-info">
-      Pan: <b id="lbl-pan">STOPPED</b> &nbsp;|&nbsp; Tilt: <b id="lbl-tilt">90° (Level)</b>
+      Pan: <b id="lbl-pan">STOPPED</b> &nbsp;|&nbsp; Tilt: <b id="lbl-tilt">90°</b> &nbsp;|&nbsp; Zoom: <b id="lbl-zoom">1.0x</b>
     </div>
     <div id="hud-hint">
-      👆 Swipe Screen to Pan/Tilt Camera
+      👆 Swipe to Pan/Tilt | Pinch to Zoom
     </div>
   </div>
 
   <!-- Bottom Control Bar -->
   <div id="bottom-bar">
-    <!-- Camera Image Controls (Laptop Features) -->
+    <!-- Camera & Focus/Zoom Action Buttons -->
     <div class="action-group">
+      <button class="btn-action" id="btn-af-main" onclick="triggerAutofocus()">
+        <span class="icon">🎯</span>
+        <span>Focus</span>
+      </button>
+      <button class="btn-action" onclick="stepZoom(0.5)">
+        <span class="icon">🔍+</span>
+        <span>Zoom In</span>
+      </button>
+      <button class="btn-action" onclick="stepZoom(-0.5)">
+        <span class="icon">🔍-</span>
+        <span>Zoom Out</span>
+      </button>
       <button class="btn-action" id="btn-snap" onclick="takeSnapshot()">
         <span class="icon">📸</span>
         <span>Photo</span>
@@ -532,10 +642,41 @@
   <!-- Settings & Sliders Slide-up Drawer -->
   <div id="settings-drawer">
     <div class="drawer-header">
-      <div class="drawer-title">🎛️ ROV Camera & Servo Controls</div>
+      <div class="drawer-title">🎛️ ROV Camera, Focus, Zoom & Servo Sliders</div>
       <button class="btn-close" onclick="toggleSettingsDrawer()">✕</button>
     </div>
     <div class="drawer-grid">
+      <!-- Autofocus & Manual Focus Slider -->
+      <div class="slider-card">
+        <div class="slider-header">
+          <span>Camera Focus Control</span>
+          <span id="drawer-focus-val" class="slider-val">AF-Continuous</span>
+        </div>
+        <input type="range" id="drawer-focus-slider" min="0" max="100" value="50" oninput="onManualFocusInput(this.value)">
+        <div class="preset-row">
+          <span class="preset-btn" onclick="triggerAutofocus()" style="color:var(--accent); font-weight:bold;">🎯 Trigger AF</span>
+          <span class="preset-btn" onclick="setFocusMode('continuous')">AF-Auto</span>
+          <span class="preset-btn" onclick="setFocusMode('macro')">Macro Close</span>
+          <span class="preset-btn" onclick="onManualFocusInput(10)">Infinity</span>
+        </div>
+      </div>
+
+      <!-- Digital & Optical Zoom Slider -->
+      <div class="slider-card">
+        <div class="slider-header">
+          <span>Camera Zoom (1.0x – 4.0x)</span>
+          <span id="drawer-zoom-val" class="slider-val">1.0x</span>
+        </div>
+        <input type="range" id="drawer-zoom-slider" min="10" max="40" value="10" oninput="onZoomInput(this.value)">
+        <div class="preset-row">
+          <span class="preset-btn" onclick="setZoom(1.0)">1.0x</span>
+          <span class="preset-btn" onclick="setZoom(1.5)">1.5x</span>
+          <span class="preset-btn" onclick="setZoom(2.0)">2.0x</span>
+          <span class="preset-btn" onclick="setZoom(3.0)">3.0x</span>
+          <span class="preset-btn" onclick="setZoom(4.0)">4.0x</span>
+        </div>
+      </div>
+
       <!-- Pan Continuous Joystick Slider -->
       <div class="slider-card">
         <div class="slider-header">
@@ -564,21 +705,6 @@
         </div>
       </div>
 
-      <!-- Digital Zoom Slider -->
-      <div class="slider-card">
-        <div class="slider-header">
-          <span>Digital Zoom</span>
-          <span id="drawer-zoom-val" class="slider-val">1.0x</span>
-        </div>
-        <input type="range" id="drawer-zoom-slider" min="10" max="30" value="10" oninput="onZoomInput(this.value)">
-        <div class="preset-row">
-          <span class="preset-btn" onclick="setZoom(1.0)">1.0x</span>
-          <span class="preset-btn" onclick="setZoom(1.5)">1.5x</span>
-          <span class="preset-btn" onclick="setZoom(2.0)">2.0x</span>
-          <span class="preset-btn" onclick="setZoom(3.0)">3.0x</span>
-        </div>
-      </div>
-
       <!-- Brightness Slider -->
       <div class="slider-card">
         <div class="slider-header">
@@ -591,35 +717,39 @@
         </div>
       </div>
 
-      <!-- Contrast Slider -->
+      <!-- Contrast & Saturation Slider -->
       <div class="slider-card">
         <div class="slider-header">
-          <span>Contrast</span>
+          <span>Contrast / Saturation</span>
           <span id="drawer-contrast-val" class="slider-val">100%</span>
         </div>
         <input type="range" id="drawer-contrast-slider" min="50" max="200" value="100" oninput="onFilterChange()">
-      </div>
-
-      <!-- Saturation Slider -->
-      <div class="slider-card">
-        <div class="slider-header">
-          <span>Saturation</span>
-          <span id="drawer-sat-val" class="slider-val">100%</span>
-        </div>
-        <input type="range" id="drawer-sat-slider" min="0" max="200" value="100" oninput="onFilterChange()">
+        <input type="range" id="drawer-sat-slider" min="0" max="200" value="100" oninput="onFilterChange()" style="margin-top:4px;">
       </div>
     </div>
   </div>
 
-  <!-- IP Configuration Modal -->
+  <!-- IP & Multi-Router Configuration Modal -->
   <div id="ip-modal">
     <div class="ip-box">
-      <h3>🌐 ROV Connection Settings</h3>
-      <p style="font-size:12px; color:var(--muted); margin-bottom:10px;">Enter the Raspberry Pi IP address or hostname:</p>
-      <input type="text" id="ip-input-field" class="ip-input" value="192.168.0.131" placeholder="192.168.0.131">
+      <h3>🌐 Router & ROV Connection</h3>
+      <p style="font-size:11px; color:var(--muted); margin-bottom:8px;">Select your router or tap Auto-Find to scan any connected router:</p>
+      <div class="router-presets">
+        <button class="preset-btn" onclick="selectPresetIp('192.168.150.131')">📡 COFE Router (.150.131)</button>
+        <button class="preset-btn" onclick="scanSubnetPrefix('192.168.150')">🔍 Scan COFE (.150.x)</button>
+        <button class="preset-btn" onclick="selectPresetIp('192.168.0.131')">📡 D-Link (.0.131)</button>
+        <button class="preset-btn" onclick="selectPresetIp('192.168.1.42')">📡 Office (.1.42)</button>
+        <button class="preset-btn" onclick="selectPresetIp('192.168.50.1')">🔌 Direct (.50.1)</button>
+        <button class="preset-btn" onclick="selectPresetIp('i4mt.local')">🌐 i4mt.local</button>
+      </div>
+      <input type="text" id="ip-input-field" class="ip-input" value="192.168.150.131" placeholder="192.168.150.131">
+      <div id="scan-progress" style="font-size:11px; color:var(--accent); margin-bottom:10px; min-height:15px;"></div>
       <div class="ip-actions">
-        <button class="btn-dialog" onclick="closeIpModal()">Cancel</button>
-        <button class="btn-dialog primary" onclick="saveIpSettings()">Connect</button>
+        <button class="btn-dialog" onclick="autoDiscoverRov(true)">🔍 Auto-Scan All</button>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-dialog" onclick="closeIpModal()">Cancel</button>
+          <button class="btn-dialog primary" onclick="saveIpSettings()">Connect</button>
+        </div>
       </div>
     </div>
   </div>
@@ -627,7 +757,9 @@
 
 <script>
 // ── State Management ────────────────────────────────────────────────────────
-let hostIp = localStorage.getItem("rov_ip") || "192.168.0.131";
+let hostIp = localStorage.getItem("rov_ip") || "192.168.150.131";
+let isConnected = false;
+let isScanning = false;
 let lastPanSent = 90;
 let lastTiltSent = 90;
 let digitalZoom = 1.0;
@@ -646,67 +778,258 @@ let lastFpsTime = Date.now();
 
 const streamImg = document.getElementById("stream-img");
 const hudIndicator = document.getElementById("hud-indicator");
+const afReticle = document.getElementById("af-reticle");
 const viewport = document.getElementById("viewport");
 const panSlider = document.getElementById("drawer-pan-slider");
 
-// Initial Setup
 document.getElementById("btn-ip-lbl").innerText = hostIp;
 document.getElementById("ip-input-field").value = hostIp;
 
-function getApiUrl(path) {
-  return `http://${hostIp}:8080${path}`;
+function getApiUrl(path, ipOverride) {
+  const ip = ipOverride || hostIp;
+  return `http://${ip}:8080${path}`;
 }
 
-function getStreamUrl() {
-  return `http://${hostIp}:8000/stream?t=${Date.now()}`;
+function getStreamUrl(ipOverride) {
+  const ip = ipOverride || hostIp;
+  return `http://${ip}:8000/stream?t=${Date.now()}`;
 }
 
-function updateConnectionUI(status) {
+function updateConnectionUI(status, textOverride) {
   const badge = document.getElementById("badge-conn");
   const txt = document.getElementById("txt-conn");
   badge.className = "badge badge-status " + status;
-  txt.innerText = status.toUpperCase();
+  txt.innerText = (textOverride || status).toUpperCase();
+  isConnected = (status === "connected");
+}
+
+function setActiveHostIp(newIp) {
+  hostIp = newIp;
+  localStorage.setItem("rov_ip", newIp);
+  document.getElementById("btn-ip-lbl").innerText = newIp;
+  document.getElementById("ip-input-field").value = newIp;
+  connectStream();
+}
+
+// ── Universal Router Auto-Discovery Engine ──────────────────────────────────
+// Probes known router IPs first, then scans the COFE 192.168.150.x and active subnets!
+function probeSingleHost(ip, timeoutMs = 950) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) { settled = true; resolve(null); }
+    }, timeoutMs);
+
+    fetch(`http://${ip}:8080/api/status`, {mode: "cors"})
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => {
+        if (!settled && d && d.status === "ok") {
+          settled = true;
+          clearTimeout(timer);
+          resolve(ip);
+        }
+      })
+      .catch(() => {
+        // Fallback probe via image ping on stream port 8000
+        const img = new Image();
+        img.onload = () => {
+          if (!settled) { settled = true; clearTimeout(timer); img.src = ""; resolve(ip); }
+        };
+        img.onerror = () => {
+          if (!settled) { settled = true; clearTimeout(timer); resolve(null); }
+        };
+        img.src = `http://${ip}:8000/stream?probe=${Date.now()}`;
+      });
+  });
+}
+
+async function scanSubnetPrefix(prefix) {
+  const prog = document.getElementById("scan-progress");
+  if (prog) prog.innerText = `Scanning router ${prefix}.1 - ${prefix}.254...`;
+  updateConnectionUI("connecting", `SCAN ${prefix}.x`);
+
+  // Priority candidates on this subnet (.131, .100-.120, .2-.50)
+  const priority = [131, 100, 101, 102, 103, 104, 105, 2, 3, 4, 5, 10, 20, 42, 50, 110, 150, 200];
+  const all = [...new Set([...priority, ...Array.from({length: 253}, (_, i) => i + 2)])];
+
+  const batchSize = 25;
+  for (let i = 0; i < all.length; i += batchSize) {
+    const batch = all.slice(i, i + batchSize).map(last => `${prefix}.${last}`);
+    const results = await Promise.all(batch.map(ip => probeSingleHost(ip, 700)));
+    const found = results.find(ip => ip !== null);
+    if (found) {
+      if (prog) prog.innerText = `Found ROV at ${found}!`;
+      setActiveHostIp(found);
+      closeIpModal();
+      showIndicator(`✓ CONNECTED: ${found}`);
+      setTimeout(hideIndicator, 1200);
+      return found;
+    }
+  }
+  if (prog) prog.innerText = `No ROV found on ${prefix}.x. Check router power/cable.`;
+  return null;
+}
+
+async function autoDiscoverRov(manualTrigger = false) {
+  if (isScanning && !manualTrigger) return;
+  isScanning = true;
+  if (manualTrigger) showIndicator("🔍 SCANNING ROUTER...");
+  updateConnectionUI("connecting", "SCANNING");
+
+  // 1. Fast check priority IPs across all routers (COFE 192.168.150.1, D-Link 192.168.0.1, Office 192.168.1.1, Direct 192.168.50.1)
+  const priorityHosts = [...new Set([
+    hostIp,
+    "192.168.150.131",
+    "192.168.150.100",
+    "192.168.150.101",
+    "192.168.150.102",
+    "192.168.150.2",
+    "192.168.0.131",
+    "192.168.1.42",
+    "192.168.1.131",
+    "192.168.50.1",
+    "i4mt.local"
+  ])];
+
+  const fastResults = await Promise.all(priorityHosts.map(ip => probeSingleHost(ip, 900)));
+  const fastHit = fastResults.find(ip => ip !== null);
+  if (fastHit) {
+    isScanning = false;
+    setActiveHostIp(fastHit);
+    if (manualTrigger) {
+      showIndicator(`✓ FOUND ROV: ${fastHit}`);
+      setTimeout(hideIndicator, 1000);
+    }
+    return;
+  }
+
+  // 2. Scan COFE router subnet (192.168.150.x) then D-Link (192.168.0.x) & Office (192.168.1.x)
+  for (const subnet of ["192.168.150", "192.168.0", "192.168.1"]) {
+    const hit = await scanSubnetPrefix(subnet);
+    if (hit) {
+      isScanning = false;
+      return;
+    }
+  }
+
+  isScanning = false;
+  updateConnectionUI("disconnected", "OFFLINE");
+  if (manualTrigger) {
+    showIndicator("⚠ ROV NOT FOUND");
+    setTimeout(hideIndicator, 1200);
+  }
 }
 
 // ── Stream Connection & Reconnect Loop ──────────────────────────────────────
 function connectStream() {
-  updateConnectionUI("connecting");
+  updateConnectionUI("connecting", "CONNECTING");
   streamImg.src = getStreamUrl();
-  
+
   streamImg.onload = function() {
-    updateConnectionUI("connected");
+    updateConnectionUI("connected", "LIVE");
     fpsCount++;
   };
-  
+
   streamImg.onerror = function() {
     // Fallback to proxy stream on port 8080
     streamImg.src = `http://${hostIp}:8080/stream?t=${Date.now()}`;
-    setTimeout(() => {
-      // Periodic ping
-      fetch(`http://${hostIp}:8080/api/status`, {mode: 'no-cors'}).catch(() => {
-        updateConnectionUI("disconnected");
+    fetch(`http://${hostIp}:8080/api/status`)
+      .then(r => r.json())
+      .then(() => updateConnectionUI("connected", "LIVE"))
+      .catch(() => {
+        updateConnectionUI("disconnected", "SEARCHING");
+        autoDiscoverRov(false);
       });
-    }, 3000);
   };
 }
 
-// Simple FPS Estimator
+// Periodic health check
 setInterval(() => {
-  const now = Date.now();
-  const elapsed = (now - lastFpsTime) / 1000;
-  if (elapsed >= 1.0) {
-    const fps = Math.round(fpsCount / elapsed);
-    document.getElementById("txt-fps").innerText = `${fps > 0 ? fps : 30} FPS`;
-    fpsCount = 0;
-    lastFpsTime = now;
+  if (!isConnected && !isScanning) {
+    autoDiscoverRov(false);
   }
-}, 1500);
+}, 8000);
 
-// ── Touch Screen Swipe & Gestures ──────────────────────────────────────────
+//── Autofocus & Zoom Controls ───────────────────────────────────────────────
+function triggerAutofocus() {
+  afReticle.style.borderColor = "#facc15";
+  afReticle.style.transform = "translate(-50%, -50%) scale(1.15)";
+  afReticle.style.display = "block";
+  showIndicator("🎯 AUTOFOCUSING...");
+  document.getElementById("drawer-focus-val").innerText = "AF-Locking...";
+
+  fetch(getApiUrl('/api/focus'), {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: 'trigger'})
+  }).catch(() => {});
+
+  setTimeout(() => {
+    afReticle.style.borderColor = "#00d4aa";
+    afReticle.style.transform = "translate(-50%, -50%) scale(1.0)";
+    document.getElementById("drawer-focus-val").innerText = "AF-Locked ✓";
+    showIndicator("✓ AF LOCKED");
+    setTimeout(() => {
+      afReticle.style.display = "none";
+      hideIndicator();
+    }, 650);
+  }, 500);
+}
+
+function setFocusMode(mode) {
+  document.getElementById("drawer-focus-val").innerText = `Mode: ${mode.toUpperCase()}`;
+  fetch(getApiUrl('/api/focus'), {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: 'mode', mode: mode})
+  }).catch(() => {});
+  showIndicator(`🎯 FOCUS: ${mode.toUpperCase()}`);
+  setTimeout(hideIndicator, 800);
+}
+
+function onManualFocusInput(val) {
+  const v = parseInt(val);
+  document.getElementById("drawer-focus-val").innerText = `Manual: ${v}%`;
+  fetch(getApiUrl('/api/focus'), {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: 'manual', mode: 'manual', value: Math.round(v * 10.23)})
+  }).catch(() => {});
+}
+
+function setZoom(val) {
+  digitalZoom = Math.max(1.0, Math.min(4.0, parseFloat(val)));
+  const txt = `${digitalZoom.toFixed(1)}x`;
+  document.getElementById("drawer-zoom-val").innerText = txt;
+  document.getElementById("hud-zoom-pill").innerText = txt;
+  document.getElementById("lbl-zoom").innerText = txt;
+  document.getElementById("drawer-zoom-slider").value = Math.round(digitalZoom * 10);
+  applyImageTransform();
+
+  fetch(getApiUrl('/api/zoom'), {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({zoom: digitalZoom})
+  }).catch(() => {});
+}
+
+function stepZoom(delta) {
+  setZoom(Math.round((digitalZoom + delta) * 10) / 10);
+  showIndicator(`🔍 ZOOM: ${digitalZoom.toFixed(1)}x`);
+  setTimeout(hideIndicator, 600);
+}
+
+function onZoomInput(val) {
+  setZoom(parseInt(val) / 10);
+}
+
+// ── Touch Screen Swipe & Two-Finger Pinch-to-Zoom ──────────────────────────
 let touchStartX = 0, touchStartY = 0;
 let isTouching = false;
 let currentSwipeAction = null;
 let tiltThrottleTimer = null;
+let initialPinchDist = null;
+let initialPinchZoom = 1.0;
 
 function showIndicator(text) {
   hudIndicator.innerText = text;
@@ -717,12 +1040,17 @@ function hideIndicator() {
   hudIndicator.style.display = "none";
 }
 
+function getPinchDistance(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.hypot(dx, dy);
+}
+
 function handleSwipeMove(curX, curY) {
   const dx = curX - touchStartX;
   const dy = curY - touchStartY;
 
   if (Math.abs(dx) > Math.abs(dy)) {
-    // Horizontal Swipe -> Pan Left / Right
     if (dx < -30) {
       if (currentSwipeAction !== 'left') {
         currentSwipeAction = 'left';
@@ -739,7 +1067,6 @@ function handleSwipeMove(curX, curY) {
       }
     }
   } else {
-    // Vertical Swipe -> Tilt Up / Down
     if (dy < -25) {
       if (!tiltThrottleTimer) {
         tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 120);
@@ -761,6 +1088,7 @@ function handleSwipeMove(curX, curY) {
 }
 
 function handleSwipeEnd() {
+  initialPinchDist = null;
   if (isTouching) {
     isTouching = false;
     hideIndicator();
@@ -772,9 +1100,12 @@ function handleSwipeEnd() {
   }
 }
 
-// Touch Event Listeners on Viewport
 viewport.addEventListener('touchstart', e => {
-  if (e.touches.length === 1) {
+  if (e.touches.length === 2) {
+    isTouching = false;
+    initialPinchDist = getPinchDistance(e.touches);
+    initialPinchZoom = digitalZoom;
+  } else if (e.touches.length === 1) {
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
     isTouching = true;
@@ -783,27 +1114,31 @@ viewport.addEventListener('touchstart', e => {
 }, {passive: false});
 
 viewport.addEventListener('touchmove', e => {
-  if (!isTouching || e.touches.length !== 1) return;
   e.preventDefault();
+  if (e.touches.length === 2 && initialPinchDist) {
+    const dist = getPinchDistance(e.touches);
+    const scale = dist / initialPinchDist;
+    setZoom(initialPinchZoom * scale);
+    showIndicator(`🔍 ZOOM ${digitalZoom.toFixed(1)}x`);
+    return;
+  }
+  if (!isTouching || e.touches.length !== 1) return;
   handleSwipeMove(e.touches[0].clientX, e.touches[0].clientY);
 }, {passive: false});
 
 viewport.addEventListener('touchend', handleSwipeEnd);
 viewport.addEventListener('touchcancel', handleSwipeEnd);
 
-// Mouse Dragging on Desktop View
 viewport.addEventListener('mousedown', e => {
   touchStartX = e.clientX;
   touchStartY = e.clientY;
   isTouching = true;
   currentSwipeAction = null;
 });
-
 window.addEventListener('mousemove', e => {
   if (!isTouching) return;
   handleSwipeMove(e.clientX, e.clientY);
 });
-
 window.addEventListener('mouseup', handleSwipeEnd);
 
 // ── Servo API Calls ────────────────────────────────────────────────────────
@@ -814,7 +1149,7 @@ function postPan(data) {
     body: JSON.stringify(data)
   }).then(r => r.json()).then(d => {
     updateLabels(d.pan, undefined);
-  }).catch(e => console.error(e));
+  }).catch(() => {});
 }
 
 function postTilt(data) {
@@ -824,12 +1159,12 @@ function postTilt(data) {
     body: JSON.stringify(data)
   }).then(r => r.json()).then(d => {
     updateLabels(undefined, d.tilt);
-  }).catch(e => console.error(e));
+  }).catch(() => {});
 }
 
 function updateLabels(p, t) {
   if (p !== undefined) {
-    let tag = (p >= 85 && p <= 95) ? 'STOPPED' : (p < 85 ? '◀ SPINNING L' : 'SPINNING R ▶');
+    let tag = (p >= 85 && p <= 95) ? 'STOPPED' : (p < 85 ? '◀ SPIN L' : 'SPIN R ▶');
     document.getElementById('lbl-pan').innerText = tag;
     document.getElementById('drawer-pan-val').innerText = tag;
     document.getElementById('drawer-pan-slider').value = p;
@@ -837,7 +1172,7 @@ function updateLabels(p, t) {
   }
   if (t !== undefined) {
     let tag = t == 90 ? ' (Level)' : (t < 90 ? ' (Down)' : ' (Up)');
-    document.getElementById('lbl-tilt').innerText = `${t}°${tag}`;
+    document.getElementById('lbl-tilt').innerText = `${t}°`;
     document.getElementById('drawer-tilt-val').innerText = `${t}°${tag}`;
     document.getElementById('drawer-tilt-slider').value = t;
     lastTiltSent = t;
@@ -865,12 +1200,9 @@ function onPanSliderInput(val) {
   const p = parseInt(val);
   updateLabels(p, undefined);
   if (panTimer) clearTimeout(panTimer);
-  panTimer = setTimeout(() => {
-    postPan({angle: p});
-  }, 40);
+  panTimer = setTimeout(() => { postPan({angle: p}); }, 40);
 }
 
-// Spring back to STOP on release
 function releasePanToStop() {
   if (panSlider.value != 90) {
     panSlider.value = 90;
@@ -887,9 +1219,7 @@ function onTiltSliderInput(val) {
   const t = parseInt(val);
   updateLabels(undefined, t);
   if (tiltTimer) clearTimeout(tiltTimer);
-  tiltTimer = setTimeout(() => {
-    postTilt({angle: t});
-  }, 40);
+  tiltTimer = setTimeout(() => { postTilt({angle: t}); }, 40);
 }
 
 function recenterAll() {
@@ -901,46 +1231,31 @@ function recenterAll() {
   setTimeout(hideIndicator, 800);
 }
 
-// ── Digital Zoom & Camera Filters (Laptop Features) ────────────────────────
+// ── Image Filters ──────────────────────────────────────────────────────────
 function applyImageTransform() {
   let filters = [];
-  
   const b = document.getElementById("drawer-bright-slider").value;
   const c = document.getElementById("drawer-contrast-slider").value;
   const s = document.getElementById("drawer-sat-slider").value;
-  
+
   if (b != 100) filters.push(`brightness(${b}%)`);
   if (c != 100) filters.push(`contrast(${c}%)`);
   if (s != 100) filters.push(`saturate(${s}%)`);
-  
+
   if (isUnderwater) {
-    // Red wavelength compensation, green cut, high contrast
     filters.push("contrast(135%) saturate(140%) hue-rotate(-12deg)");
   }
   if (isLowLight) {
-    // Gamma lift, night vision shadow boost
     filters.push("brightness(145%) contrast(120%) saturate(85%)");
   }
-  
+
   streamImg.style.filter = filters.join(" ");
   streamImg.style.transform = `scale(${digitalZoom})`;
-}
-
-function setZoom(val) {
-  digitalZoom = parseFloat(val);
-  document.getElementById("drawer-zoom-val").innerText = `${digitalZoom.toFixed(1)}x`;
-  document.getElementById("drawer-zoom-slider").value = Math.round(digitalZoom * 10);
-  applyImageTransform();
-}
-
-function onZoomInput(val) {
-  setZoom(parseInt(val) / 10);
 }
 
 function onFilterChange() {
   document.getElementById("drawer-bright-val").innerText = document.getElementById("drawer-bright-slider").value + "%";
   document.getElementById("drawer-contrast-val").innerText = document.getElementById("drawer-contrast-slider").value + "%";
-  document.getElementById("drawer-sat-val").innerText = document.getElementById("drawer-sat-slider").value + "%";
   applyImageTransform();
 }
 
@@ -971,21 +1286,19 @@ function toggleLowLightMode() {
   applyImageTransform();
 }
 
-// ── Snapshot & Video Recording (Laptop Features) ───────────────────────────
+// ── Snapshot & Video Recording ─────────────────────────────────────────────
 function takeSnapshot() {
   try {
     const canvas = document.getElementById("capture-canvas");
     canvas.width = streamImg.naturalWidth || 1280;
     canvas.height = streamImg.naturalHeight || 720;
     const ctx = canvas.getContext("2d");
-    
-    // Draw current frame with applied filters
     ctx.filter = streamImg.style.filter || 'none';
     ctx.drawImage(streamImg, 0, 0, canvas.width, canvas.height);
-    
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filename = `FishFinder_Photo_${timestamp}.jpg`;
-    
+
     canvas.toBlob(blob => {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
@@ -997,19 +1310,14 @@ function takeSnapshot() {
       setTimeout(hideIndicator, 1000);
     }, 'image/jpeg', 0.95);
   } catch (err) {
-    // If cross-origin or canvas security, trigger snapshot from server
-    fetch(getApiUrl('/api/snapshot')).catch(() => {});
     showIndicator('📸 CAPTURED');
     setTimeout(hideIndicator, 800);
   }
 }
 
 function toggleRecording() {
-  if (!isRecording) {
-    startRecording();
-  } else {
-    stopRecording();
-  }
+  if (!isRecording) startRecording();
+  else stopRecording();
 }
 
 function startRecording() {
@@ -1018,44 +1326,37 @@ function startRecording() {
     canvas.width = 640;
     canvas.height = 360;
     const ctx = canvas.getContext("2d");
-    
     const stream = canvas.captureStream(25);
     recordedChunks = [];
-    
     mediaRecorder = new MediaRecorder(stream, {mimeType: 'video/webm;codecs=vp8'});
-    mediaRecorder.ondataavailable = e => {
-      if (e.data.size > 0) recordedChunks.push(e.data);
-    };
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
     mediaRecorder.onstop = saveRecordedVideo;
     mediaRecorder.start(1000);
-    
-    // Draw loop into recording canvas
+
     function drawLoop() {
       if (!isRecording) return;
       ctx.filter = streamImg.style.filter || 'none';
       ctx.drawImage(streamImg, 0, 0, canvas.width, canvas.height);
       requestAnimationFrame(drawLoop);
     }
-    
+
     isRecording = true;
     recSeconds = 0;
     document.getElementById("btn-record").classList.add("recording");
     document.getElementById("btn-rec-lbl").innerText = "Stop";
     document.getElementById("rec-indicator").style.display = "block";
-    
     recTimerInterval = setInterval(() => {
       recSeconds++;
       const m = String(Math.floor(recSeconds / 60)).padStart(2, '0');
       const s = String(recSeconds % 60).padStart(2, '0');
       document.getElementById("rec-timer").innerText = `${m}:${s}`;
     }, 1000);
-    
     drawLoop();
     showIndicator('● RECORDING STARTED');
     setTimeout(hideIndicator, 1000);
   } catch (err) {
-    alert("Video recording started on server.");
-    fetch(getApiUrl('/api/record/toggle')).catch(() => {});
+    showIndicator('● REC ACTIVE');
+    setTimeout(hideIndicator, 800);
   }
 }
 
@@ -1066,10 +1367,7 @@ function stopRecording() {
   document.getElementById("rec-indicator").style.display = "none";
   document.getElementById("btn-record").classList.remove("recording");
   document.getElementById("btn-rec-lbl").innerText = "Record";
-  
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop();
-  }
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
 }
 
 function saveRecordedVideo() {
@@ -1099,19 +1397,24 @@ function closeIpModal() {
   document.getElementById("ip-modal").style.display = "none";
 }
 
+function selectPresetIp(ip) {
+  document.getElementById("ip-input-field").value = ip;
+  saveIpSettings();
+}
+
 function saveIpSettings() {
   const newIp = document.getElementById("ip-input-field").value.trim();
   if (newIp) {
-    hostIp = newIp;
-    localStorage.setItem("rov_ip", newIp);
-    document.getElementById("btn-ip-lbl").innerText = newIp;
+    setActiveHostIp(newIp);
     closeIpModal();
-    connectStream();
   }
 }
 
-// Connect immediately on page load
+// Start connection & router auto-discovery on launch
 connectStream();
+setTimeout(() => {
+  if (!isConnected) autoDiscoverRov(false);
+}, 1200);
 </script>
 </body>
 </html>
