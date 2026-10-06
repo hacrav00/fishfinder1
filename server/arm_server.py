@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 """
-arm_server.py — FishFinder Robotic Arm & Video Hub
-===================================================
-Jitter-Free Servo Controller with Idle Sleep:
-- Tilt (GPIO 19 / Pin 35): 180° Positional Servo with auto-sleep after positioning
-- Pan  (GPIO 18 / Pin 12): 360° Continuous Rotation with zero-pulse stop (no creep)
+arm_server.py — FishFinder Robotic Arm, Camera Focus/Zoom & Multi-Router Hub
+=============================================================================
+- Jitter-Free Servo Controller with Idle Sleep:
+  * Tilt (GPIO 19 / Pin 35): 180° Positional Servo with auto-sleep after positioning
+  * Pan  (GPIO 18 / Pin 12): 360° Continuous Rotation with zero-pulse stop (no creep)
+- Camera Autofocus & Zoom Control (/api/focus, /api/zoom via V4L2)
+- Universal Router Auto-Detection (COFE 192.168.150.1, D-Link 192.168.0.1,
+  Office 192.168.1.1, Direct Cable 192.168.50.1, and any DHCP router)
 """
 import os
+import re
 import sys
 import json
 import time
+import socket
 import threading
+import subprocess
 import urllib.request
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import lgpio
@@ -30,9 +36,79 @@ lgpio.gpio_claim_output(h, TILT_PIN)
 arm_lock = threading.Lock()
 current_tilt = 90
 current_pan = 90
+current_zoom = 1.0
+current_focus_mode = "continuous"
+current_focus_val = 50
 
 tilt_sleep_timer = None
 pan_timer = None
+
+
+def _run_cmd(cmd):
+    try:
+        r = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=4)
+        return r.stdout.strip()
+    except Exception:
+        return ""
+
+
+def get_pi_ips():
+    out = _run_cmd("ip -4 -o addr show")
+    ips = []
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 4 and parts[1] != "lo":
+            ip = parts[3].split("/")[0]
+            if not ip.startswith("169.254.") and not ip.startswith("127."):
+                ips.append(ip)
+    return ips
+
+
+# --- Universal Router Auto-Connection (COFE 192.168.150.1 + Any Router) ---
+KNOWN_ROUTER_IPS = [
+    "192.168.150.131/24",  # COFE CF-707 WF Router (192.168.150.1)
+    "192.168.0.131/24",    # D-Link Router (192.168.0.1)
+    "192.168.1.131/24",    # Standard Router (192.168.1.1)
+    "192.168.50.1/24",     # Direct Laptop Ethernet
+]
+
+
+def start_universal_router_daemon():
+    try:
+        import router_autoconnect
+        router_autoconnect.start_background_autoconnect()
+        return
+    except Exception:
+        pass
+
+    def _router_loop():
+        # Ensure NetworkManager profile persists static aliases + DHCP
+        addrs_csv = ",".join(KNOWN_ROUTER_IPS)
+        _run_cmd(f'sudo nmcli con mod "rov-eth" ipv4.method auto ipv4.addresses "{addrs_csv}" ipv4.may-fail yes 2>/dev/null || true')
+        _run_cmd('sudo nmcli con up "rov-eth" 2>/dev/null || true')
+
+        while True:
+            try:
+                _run_cmd("sudo ip link set eth0 up 2>/dev/null || true")
+                active_ips = set(get_pi_ips())
+                for cidr in KNOWN_ROUTER_IPS:
+                    ip = cidr.split("/")[0]
+                    if ip not in active_ips:
+                        _run_cmd(f"sudo ip addr add {cidr} dev eth0 2>/dev/null || true")
+
+                # Detect any new router subnet on eth0 and bind <subnet>.131/24
+                routes = _run_cmd("ip -4 addr show dev eth0") + "\n" + _run_cmd("ip -4 route show dev eth0")
+                for m in re.findall(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}\b", routes):
+                    if not m.startswith(("169.254", "127.", "224.", "255.")):
+                        target = f"{m}.131"
+                        if target not in active_ips:
+                            _run_cmd(f"sudo ip addr add {target}/24 dev eth0 2>/dev/null || true")
+            except Exception:
+                pass
+            time.sleep(5.0)
+
+    threading.Thread(target=_router_loop, daemon=True, name="router-daemon").start()
+
 
 def stop_pwm(pin):
     """Cleanly cuts off pulses using lgpio.tx_pulse(0, 0). Eliminates jitter, buzzing, and creeping!"""
@@ -41,21 +117,18 @@ def stop_pwm(pin):
     except Exception:
         pass
 
+
 def deg_to_pw_tilt(deg):
-    """Maps 0..180 degrees to 600..2400 microseconds."""
     clamped = max(0.0, min(180.0, float(deg)))
     return int(600 + (clamped / 180.0) * 1800)
+
 
 def deg_to_pw_pan(deg):
-    """Maps 0..180 to continuous servo speed/direction."""
     clamped = max(0.0, min(180.0, float(deg)))
     return int(600 + (clamped / 180.0) * 1800)
 
+
 def set_tilt(deg):
-    """
-    Drives 180° positional servo to target angle, then sleeps after 0.7s
-    to eliminate jitter, buzzing, overheating, and undervoltage.
-    """
     global current_tilt, tilt_sleep_timer
     with arm_lock:
         if tilt_sleep_timer:
@@ -74,13 +147,8 @@ def set_tilt(deg):
         tilt_sleep_timer.daemon = True
         tilt_sleep_timer.start()
 
+
 def set_pan(deg_or_action, duration=None):
-    """
-    360° Continuous Rotation Servo:
-    - 90 deg / "stop" = Completely cuts PWM so motor NEVER creeps or spins idle!
-    - < 85 deg / "left" = Spins Left
-    - > 95 deg / "right" = Spins Right
-    """
     global current_pan, pan_timer
     with arm_lock:
         if pan_timer:
@@ -92,19 +160,20 @@ def set_pan(deg_or_action, duration=None):
             if act == "left":
                 current_pan = 40
                 pw = 1200
-                if duration is None: duration = 0.5
+                if duration is None:
+                    duration = 0.5
             elif act == "right":
                 current_pan = 140
                 pw = 1800
-                if duration is None: duration = 0.5
-            else: # "stop", "center"
+                if duration is None:
+                    duration = 0.5
+            else:
                 current_pan = 90
                 stop_pwm(PAN_PIN)
                 return
         else:
             deg = max(0, min(180, int(deg_or_action)))
             current_pan = deg
-            # Deadband around 90: Stop completely!
             if 84 <= deg <= 96:
                 current_pan = 90
                 stop_pwm(PAN_PIN)
@@ -120,9 +189,51 @@ def set_pan(deg_or_action, duration=None):
             pan_timer.daemon = True
             pan_timer.start()
 
+
+def apply_camera_focus(action="trigger", mode=None, value=None):
+    """Triggers hardware V4L2 autofocus or manual focus across /dev/video0 and subdevs."""
+    global current_focus_mode, current_focus_val
+    devices = ["/dev/video0", "/dev/v4l-subdev0", "/dev/v4l-subdev1", "/dev/v4l-subdev2"]
+
+    if mode:
+        current_focus_mode = str(mode).lower()
+
+    if action == "trigger":
+        # Pulse autofocus cycle + optimize sharpness
+        for dev in devices:
+            if os.path.exists(dev):
+                _run_cmd(f"v4l2-ctl -d {dev} --set-ctrl=focus_automatic_continuous=1 2>/dev/null || true")
+                _run_cmd(f"v4l2-ctl -d {dev} --set-ctrl=auto_focus_start=1 2>/dev/null || true")
+                _run_cmd(f"v4l2-ctl -d {dev} --set-ctrl=sharpness=180 2>/dev/null || true")
+        current_focus_mode = "continuous"
+    elif current_focus_mode == "continuous":
+        for dev in devices:
+            if os.path.exists(dev):
+                _run_cmd(f"v4l2-ctl -d {dev} --set-ctrl=focus_automatic_continuous=1 2>/dev/null || true")
+    elif current_focus_mode in ("manual", "macro"):
+        if value is not None:
+            current_focus_val = max(0, min(1023, int(float(value))))
+        elif current_focus_mode == "macro":
+            current_focus_val = 450
+        for dev in devices:
+            if os.path.exists(dev):
+                _run_cmd(f"v4l2-ctl -d {dev} --set-ctrl=focus_automatic_continuous=0 2>/dev/null || true")
+                _run_cmd(f"v4l2-ctl -d {dev} --set-ctrl=focus_absolute={current_focus_val} 2>/dev/null || true")
+
+
+def apply_camera_zoom(zoom_val):
+    """Applies V4L2 hardware zoom if supported and tracks current zoom state."""
+    global current_zoom
+    current_zoom = max(1.0, min(4.0, round(float(zoom_val), 2)))
+    zoom_int = int(100 + (current_zoom - 1.0) * 100)
+    if os.path.exists("/dev/video0"):
+        _run_cmd(f"v4l2-ctl -d /dev/video0 --set-ctrl=zoom_absolute={zoom_int} 2>/dev/null || true")
+
+
 # Initialize both motors to completely STOPPED and QUIET on startup
 stop_pwm(PAN_PIN)
 stop_pwm(TILT_PIN)
+start_universal_router_daemon()
 
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -134,30 +245,31 @@ HTML_PAGE = """<!DOCTYPE html>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
   body { background: #0a0e14; color: #e6edf3; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 12px; }
-  header { width: 100%; max-width: 900px; display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #21262d; margin-bottom: 12px; }
+  header { width: 100%; max-width: 960px; display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #21262d; margin-bottom: 12px; }
   h1 { font-size: 1.2rem; color: #00d4aa; display: flex; align-items: center; gap: 8px; }
   .badge { background: #161b22; border: 1px solid #30363d; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; color: #58a6ff; font-weight: 600; }
-  .container { width: 100%; max-width: 900px; display: grid; grid-template-columns: 1fr; gap: 14px; }
+  .container { width: 100%; max-width: 960px; display: grid; grid-template-columns: 1fr; gap: 14px; }
   @media(min-width: 768px) { .container { grid-template-columns: 2fr 1fr; } }
   .video-card { background: #010409; border: 1px solid #21262d; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
-  .video-container { position: relative; width: 100%; padding-top: 56.25%; background: #000; }
-  .video-container img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
-  .controls-card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
-  .section-title { font-size: 0.85rem; font-weight: 700; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #21262d; padding-bottom: 6px; }
+  .video-container { position: relative; width: 100%; padding-top: 56.25%; background: #000; overflow: hidden; }
+  .video-container img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; transform-origin: center center; transition: transform 0.15s ease; }
+  .controls-card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .section-title { font-size: 0.82rem; font-weight: 700; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #21262d; padding-bottom: 6px; }
   .dpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; max-width: 220px; margin: 0 auto; }
-  .btn { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; border-radius: 6px; padding: 12px; font-weight: 600; cursor: pointer; text-align: center; transition: all 0.1s ease; user-select: none; }
+  .btn { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; border-radius: 6px; padding: 10px; font-weight: 600; cursor: pointer; text-align: center; transition: all 0.1s ease; user-select: none; }
   .btn:hover { background: #30363d; color: #fff; }
   .btn:active { background: #00d4aa; color: #000; transform: scale(0.96); }
   .btn-accent { background: #0f766e; color: #99f6e4; border-color: #14b8a6; }
-  .btn-accent:active { background: #14b8a6; color: #000; }
-  .slider-row { display: flex; flex-direction: column; gap: 6px; }
-  .slider-lbl { display: flex; justify-content: space-between; font-size: 0.85rem; color: #c9d1d9; font-weight: 500; }
+  .quick-bar { display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap; }
+  .quick-bar .btn { flex: 1; min-width: 68px; font-size: 0.82rem; padding: 9px 6px; }
+  .slider-row { display: flex; flex-direction: column; gap: 5px; }
+  .slider-lbl { display: flex; justify-content: space-between; font-size: 0.82rem; color: #c9d1d9; font-weight: 500; }
   .slider-val { font-family: monospace; font-weight: 700; color: #38bdf8; }
   input[type=range] { width: 100%; accent-color: #00d4aa; height: 10px; border-radius: 5px; cursor: pointer; }
   .hint-row { display: flex; justify-content: space-between; font-size: 10px; color: #64748b; margin-top: 2px; }
   .hint-row span { cursor: pointer; padding: 2px 4px; border-radius: 3px; }
   .hint-row span:hover { color: #38bdf8; background: #21262d; }
-  .status-bar { font-size: 0.8rem; color: #8b949e; text-align: center; margin-top: 4px; }
+  #af-box { display: none; position: absolute; top: 50%; left: 50%; width: 90px; height: 90px; transform: translate(-50%, -50%); border: 2px solid #facc15; border-radius: 8px; pointer-events: none; z-index: 12; box-shadow: 0 0 12px rgba(250,204,21,0.5); }
 </style>
 </head>
 <body>
@@ -169,19 +281,35 @@ HTML_PAGE = """<!DOCTYPE html>
   <div class="video-card">
     <div class="video-container" id="video-touch-area" style="touch-action: none; cursor: grab;">
       <img id="stream-img" src="" alt="Camera Feed">
-      <div id="gesture-indicator" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(11,15,25,0.85); color:#00d4aa; padding:10px 18px; border-radius:12px; font-weight:bold; font-size:15px; pointer-events:none; border:1px solid #00d4aa; z-index:10; box-shadow:0 4px 12px rgba(0,0,0,0.5);">
+      <div id="af-box"></div>
+      <div id="gesture-indicator" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(11,15,25,0.85); color:#00d4aa; padding:10px 18px; border-radius:12px; font-weight:bold; font-size:15px; pointer-events:none; border:1px solid #00d4aa; z-index:10;">
         <span id="gesture-text">SWIPE</span>
       </div>
-      <div style="position:absolute; bottom:8px; right:10px; background:rgba(15,23,42,0.75); padding:3px 8px; border-radius:6px; font-size:10px; color:#94a3b8; pointer-events:none; backdrop-filter:blur(4px);">
-        👆 Swipe screen to move camera
+      <div style="position:absolute; bottom:8px; right:10px; background:rgba(15,23,42,0.75); padding:3px 8px; border-radius:6px; font-size:10px; color:#94a3b8; pointer-events:none;">
+        👆 Swipe to Pan/Tilt | Pinch to Zoom
       </div>
     </div>
     <div style="padding: 10px 14px; font-size: 0.85rem; color: #8b949e; display: flex; justify-content: space-between;">
-      <span>Camera Feed (Port 8000)</span>
+      <span id="zoom-info" style="color:#38bdf8; font-weight:600;">Zoom: 1.0x | AF: Ready</span>
       <span id="pos-info" style="color:#00d4aa; font-weight:600;">Pan: STOPPED | Tilt: 90°</span>
     </div>
   </div>
   <div class="controls-card">
+    <div class="section-title">Autofocus & Zoom Controls</div>
+    <div class="quick-bar">
+      <button class="btn btn-accent" onclick="triggerAutofocus()">🎯 Autofocus</button>
+      <button class="btn" onclick="stepZoom(-0.5)">🔍- Zoom Out</button>
+      <button class="btn" onclick="stepZoom(0.5)">🔍+ Zoom In</button>
+      <button class="btn" onclick="setZoomLevel(1.0)">1.0x Reset</button>
+    </div>
+    <div class="slider-row">
+      <div class="slider-lbl">
+        <span>Digital & Optical Zoom</span>
+        <span id="zoom-val" class="slider-val">1.0x</span>
+      </div>
+      <input type="range" id="zoom-slider" min="10" max="40" value="10" oninput="setZoomLevel(this.value/10)">
+    </div>
+
     <div class="section-title">Pan & Tilt Servo Controls</div>
     <div class="dpad">
       <div></div>
@@ -194,8 +322,7 @@ HTML_PAGE = """<!DOCTYPE html>
       <button class="btn" onclick="sendTiltAction('down')">▼ Down</button>
       <div></div>
     </div>
-    
-    <!-- Pan Slider with Spring Return to Stop -->
+
     <div class="slider-row">
       <div class="slider-lbl">
         <span>Pan (360° Joystick Slider)</span>
@@ -203,40 +330,33 @@ HTML_PAGE = """<!DOCTYPE html>
       </div>
       <input type="range" id="pan-slider" min="0" max="180" value="90" oninput="onPanInput(this.value)">
       <div class="hint-row">
-        <span onclick="triggerPanTimed('left')">◀ Nudge Left (0.5s)</span>
+        <span onclick="triggerPanTimed('left')">◀ Nudge Left</span>
         <span onclick="triggerPanStop()" style="color:#00d4aa; font-weight:bold;">⏹ STOP</span>
-        <span onclick="triggerPanTimed('right')">Nudge Right (0.5s) ▶</span>
+        <span onclick="triggerPanTimed('right')">Nudge Right ▶</span>
       </div>
     </div>
 
-    <!-- Tilt 180 Positional Slider -->
-    <div class="slider-row" style="margin-top: 6px;">
+    <div class="slider-row">
       <div class="slider-lbl">
         <span>Tilt Angle (0°–180° Positional)</span>
         <span id="tilt-val" class="slider-val">90° (Level)</span>
       </div>
-      <input type="range" id="tilt-slider" min="0" max="180" value="90" oninput="onTiltSlider(this.value)" onchange="onTiltSlider(this.value)">
+      <input type="range" id="tilt-slider" min="0" max="180" value="90" oninput="onTiltSlider(this.value)">
       <div class="hint-row">
         <span onclick="setTiltDirect(0)">0° Down</span>
         <span onclick="setTiltDirect(90)" style="color:#00d4aa; font-weight:bold;">90° Level</span>
         <span onclick="setTiltDirect(180)">180° Up</span>
       </div>
     </div>
-
-    <div class="status-bar">Idle Auto-Sleep active: Motors stay completely still and silent when not touched.</div>
   </div>
 </div>
 <script>
 const feed = document.getElementById("stream-img");
 feed.src = "http://" + window.location.hostname + ":8000/stream";
-feed.onerror = function() {
-  feed.src = "/stream?t=" + Date.now();
-};
+feed.onerror = function() { feed.src = "/stream?t=" + Date.now(); };
 
-let lastPanSent = 90;
-let lastTiltSent = 90;
-let panTimer = null;
-let tiltTimer = null;
+let lastPanSent = 90, lastTiltSent = 90, currentZoom = 1.0;
+let panTimer = null, tiltTimer = null;
 
 function post(url, data) {
   return fetch(url, {
@@ -246,6 +366,32 @@ function post(url, data) {
   }).then(r => r.json()).then(d => {
     updateLabels(d.pan, d.tilt);
   }).catch(e => console.error(e));
+}
+
+function triggerAutofocus() {
+  const box = document.getElementById("af-box");
+  box.style.borderColor = "#facc15";
+  box.style.display = "block";
+  showIndicator("🎯 AUTOFOCUSING...");
+  post('/api/focus', {action: 'trigger'});
+  setTimeout(() => {
+    box.style.borderColor = "#00d4aa";
+    showIndicator("✓ AF LOCKED");
+    setTimeout(() => { box.style.display = "none"; hideIndicator(); }, 600);
+  }, 550);
+}
+
+function setZoomLevel(z) {
+  currentZoom = Math.max(1.0, Math.min(4.0, parseFloat(z)));
+  feed.style.transform = `scale(${currentZoom})`;
+  document.getElementById("zoom-val").innerText = currentZoom.toFixed(1) + "x";
+  document.getElementById("zoom-slider").value = Math.round(currentZoom * 10);
+  document.getElementById("zoom-info").innerText = `Zoom: ${currentZoom.toFixed(1)}x | AF: Ready`;
+  post('/api/zoom', {zoom: currentZoom});
+}
+
+function stepZoom(delta) {
+  setZoomLevel(currentZoom + delta);
 }
 
 function updateLabels(p, t) {
@@ -268,32 +414,18 @@ function updateLabels(p, t) {
 }
 
 function sendTiltAction(act) { post('/api/tilt', {action: act}); }
-
 function triggerPanTimed(dir) {
   post('/api/pan', {action: dir, duration: 0.5});
   setTimeout(() => { updateLabels(90, undefined); }, 550);
 }
-
-function triggerPanStop() {
-  updateLabels(90, undefined);
-  post('/api/pan', {angle: 90});
-}
-
-function setTiltDirect(val) {
-  updateLabels(undefined, parseInt(val));
-  post('/api/tilt', {angle: parseInt(val)});
-}
-
+function triggerPanStop() { updateLabels(90, undefined); post('/api/pan', {angle: 90}); }
+function setTiltDirect(val) { updateLabels(undefined, parseInt(val)); post('/api/tilt', {angle: parseInt(val)}); }
 function onPanInput(val) {
   const p = parseInt(val);
   updateLabels(p, undefined);
   if (panTimer) clearTimeout(panTimer);
-  panTimer = setTimeout(() => {
-    post('/api/pan', {angle: p});
-  }, 35);
+  panTimer = setTimeout(() => { post('/api/pan', {angle: p}); }, 35);
 }
-
-// Auto-Spring Return to STOP on finger/mouse release
 const panSlider = document.getElementById('pan-slider');
 function releasePanToStop() {
   if (panSlider.value != 90) {
@@ -311,135 +443,67 @@ function onTiltSlider(val) {
   const t = parseInt(val);
   updateLabels(undefined, t);
   if (tiltTimer) clearTimeout(tiltTimer);
-  tiltTimer = setTimeout(() => {
-    post('/api/tilt', {angle: t});
-  }, 35);
+  tiltTimer = setTimeout(() => { post('/api/tilt', {angle: t}); }, 35);
 }
-
 function recenter() {
   updateLabels(90, 90);
   post('/api/pan', {angle: 90});
   post('/api/tilt', {angle: 90});
 }
 
-window.addEventListener('keydown', e => {
-  if (e.repeat) return;
-  if (e.key === 'w' || e.key === 'ArrowUp') sendTiltAction('up');
-  else if (e.key === 's' || e.key === 'ArrowDown') sendTiltAction('down');
-  else if (e.key === 'a' || e.key === 'ArrowLeft') triggerPanTimed('left');
-  else if (e.key === 'd' || e.key === 'ArrowRight') triggerPanTimed('right');
-  else if (e.key === ' ') recenter();
-});
-
-// --- Screen Touching / Swipe Camera Movement ---
 const touchArea = document.getElementById("video-touch-area");
 const indicator = document.getElementById("gesture-indicator");
 const indicatorText = document.getElementById("gesture-text");
+let touchStartX = 0, touchStartY = 0, isTouching = false, currentSwipeAction = null, tiltThrottleTimer = null;
 
-let touchStartX = 0, touchStartY = 0;
-let isTouching = false;
-let currentSwipeAction = null;
-let tiltThrottleTimer = null;
-
-function showIndicator(txt) {
-  indicatorText.innerText = txt;
-  indicator.style.display = "block";
-}
-function hideIndicator() {
-  indicator.style.display = "none";
-}
+function showIndicator(txt) { indicatorText.innerText = txt; indicator.style.display = "block"; }
+function hideIndicator() { indicator.style.display = "none"; }
 
 function handleSwipeMove(curX, curY) {
-  const dx = curX - touchStartX;
-  const dy = curY - touchStartY;
-  
+  const dx = curX - touchStartX, dy = curY - touchStartY;
   if (Math.abs(dx) > Math.abs(dy)) {
-    // Horizontal swipe -> Pan Left / Right
-    if (dx < -25) {
-      if (currentSwipeAction !== 'left') {
-        currentSwipeAction = 'left';
-        showIndicator('◀ PAN LEFT');
-        post('/api/pan', {action: 'left'});
-        updateLabels(40, undefined);
-      }
-    } else if (dx > 25) {
-      if (currentSwipeAction !== 'right') {
-        currentSwipeAction = 'right';
-        showIndicator('PAN RIGHT ▶');
-        post('/api/pan', {action: 'right'});
-        updateLabels(140, undefined);
-      }
+    if (dx < -25 && currentSwipeAction !== 'left') {
+      currentSwipeAction = 'left'; showIndicator('◀ PAN LEFT'); post('/api/pan', {action: 'left'}); updateLabels(40, undefined);
+    } else if (dx > 25 && currentSwipeAction !== 'right') {
+      currentSwipeAction = 'right'; showIndicator('PAN RIGHT ▶'); post('/api/pan', {action: 'right'}); updateLabels(140, undefined);
     }
   } else {
-    // Vertical swipe -> Tilt Up / Down
-    if (dy < -20) {
-      if (!tiltThrottleTimer) {
-        tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 110);
-        const nextTilt = Math.min(180, lastTiltSent + 5);
-        showIndicator('▲ TILT UP (' + nextTilt + '°)');
-        updateLabels(undefined, nextTilt);
-        post('/api/tilt', {angle: nextTilt});
-      }
-    } else if (dy > 20) {
-      if (!tiltThrottleTimer) {
-        tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 110);
-        const nextTilt = Math.max(0, lastTiltSent - 5);
-        showIndicator('▼ TILT DOWN (' + nextTilt + '°)');
-        updateLabels(undefined, nextTilt);
-        post('/api/tilt', {angle: nextTilt});
-      }
+    if (dy < -20 && !tiltThrottleTimer) {
+      tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 110);
+      const nextTilt = Math.min(180, lastTiltSent + 5);
+      showIndicator('▲ TILT UP (' + nextTilt + '°)'); updateLabels(undefined, nextTilt); post('/api/tilt', {angle: nextTilt});
+    } else if (dy > 20 && !tiltThrottleTimer) {
+      tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 110);
+      const nextTilt = Math.max(0, lastTiltSent - 5);
+      showIndicator('▼ TILT DOWN (' + nextTilt + '°)'); updateLabels(undefined, nextTilt); post('/api/tilt', {angle: nextTilt});
     }
   }
 }
-
 function handleSwipeEnd() {
   if (isTouching) {
-    isTouching = false;
-    hideIndicator();
+    isTouching = false; hideIndicator();
     if (currentSwipeAction === 'left' || currentSwipeAction === 'right') {
-      currentSwipeAction = null;
-      post('/api/pan', {action: 'stop'});
-      updateLabels(90, undefined);
+      currentSwipeAction = null; post('/api/pan', {action: 'stop'}); updateLabels(90, undefined);
     }
   }
 }
-
 touchArea.addEventListener('touchstart', e => {
-  if (e.touches.length === 1) {
-    touchStartX = e.touches[0].clientX;
-    touchStartY = e.touches[0].clientY;
-    isTouching = true;
-    currentSwipeAction = null;
-  }
+  if (e.touches.length === 1) { touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY; isTouching = true; currentSwipeAction = null; }
 }, {passive: false});
-
 touchArea.addEventListener('touchmove', e => {
   if (!isTouching || e.touches.length !== 1) return;
-  e.preventDefault();
-  handleSwipeMove(e.touches[0].clientX, e.touches[0].clientY);
+  e.preventDefault(); handleSwipeMove(e.touches[0].clientX, e.touches[0].clientY);
 }, {passive: false});
-
 touchArea.addEventListener('touchend', handleSwipeEnd);
 touchArea.addEventListener('touchcancel', handleSwipeEnd);
-
-// Mouse dragging support on desktop:
-touchArea.addEventListener('mousedown', e => {
-  touchStartX = e.clientX;
-  touchStartY = e.clientY;
-  isTouching = true;
-  currentSwipeAction = null;
-});
-
-window.addEventListener('mousemove', e => {
-  if (!isTouching) return;
-  handleSwipeMove(e.clientX, e.clientY);
-});
-
+touchArea.addEventListener('mousedown', e => { touchStartX = e.clientX; touchStartY = e.clientY; isTouching = true; currentSwipeAction = null; });
+window.addEventListener('mousemove', e => { if (isTouching) handleSwipeMove(e.clientX, e.clientY); });
 window.addEventListener('mouseup', handleSwipeEnd);
 </script>
 </body>
 </html>
 """
+
 
 class RequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
@@ -469,7 +533,16 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._send_cors()
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            resp = {"tilt": current_tilt, "pan": current_pan, "status": "ok"}
+            resp = {
+                "service": "fishfinder-rov",
+                "status": "ok",
+                "tilt": current_tilt,
+                "pan": current_pan,
+                "zoom": current_zoom,
+                "focus_mode": current_focus_mode,
+                "focus_val": current_focus_val,
+                "ips": get_pi_ips(),
+            }
             self.wfile.write(json.dumps(resp).encode("utf-8"))
             return
 
@@ -503,7 +576,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 while True:
                     chunk = upstream.read(2048)
-                    if not chunk: break
+                    if not chunk:
+                        break
                     self.wfile.write(chunk)
                     self.wfile.flush()
             except Exception:
@@ -556,15 +630,50 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"status": "ok", "pan": current_pan, "tilt": current_tilt}).encode("utf-8"))
             return
 
+        if self.path == "/api/focus":
+            act = data.get("action", "trigger")
+            mode = data.get("mode", None)
+            val = data.get("value", None)
+            apply_camera_focus(action=act, mode=mode, value=val)
+            self.send_response(200)
+            self._send_cors()
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status": "ok",
+                "focus_mode": current_focus_mode,
+                "focus_val": current_focus_val,
+                "pan": current_pan,
+                "tilt": current_tilt
+            }).encode("utf-8"))
+            return
+
+        if self.path == "/api/zoom":
+            z = data.get("zoom", 1.0)
+            apply_camera_zoom(z)
+            self.send_response(200)
+            self._send_cors()
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status": "ok",
+                "zoom": current_zoom,
+                "pan": current_pan,
+                "tilt": current_tilt
+            }).encode("utf-8"))
+            return
+
         self.send_error(404)
+
 
 def run():
     server = ThreadingHTTPServer(("0.0.0.0", 8080), RequestHandler)
-    print("FishFinder Arm Controller running on port 8080 (Idle Auto-Sleep active)...")
+    print("FishFinder Arm & Camera Hub running on port 8080 (Universal Router Auto-Connect active)...")
     try:
         server.serve_forever()
     finally:
         lgpio.gpiochip_close(h)
+
 
 if __name__ == "__main__":
     run()
