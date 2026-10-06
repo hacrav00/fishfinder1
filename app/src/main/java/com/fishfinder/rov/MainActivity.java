@@ -2,6 +2,10 @@ package com.fishfinder.rov;
 
 import android.app.DownloadManager;
 import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -26,6 +30,8 @@ public class MainActivity extends AppCompatActivity {
 
     private WebView webView;
     private static final String LOCAL_URL = "file:///android_asset/www/index.html";
+    private ConnectivityManager connectivityManager;
+    private ConnectivityManager.NetworkCallback wifiNetworkCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,12 +42,67 @@ public class MainActivity extends AppCompatActivity {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             setContentView(R.layout.activity_main);
 
+            // Force app traffic onto local ROV Wi-Fi router (e.g. COFE_AF9B)
+            // even when Android says "Connected to device. Can't provide Internet."
+            bindToWifiNetwork();
+
             webView = findViewById(R.id.webview);
             configureWebView();
             webView.loadUrl(LOCAL_URL);
         } catch (Exception e) {
             Toast.makeText(this, "Init Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+
+    /**
+     * Binds this app process directly to the active Wi-Fi transport network,
+     * bypassing Android's cellular fallback when the ROV router has no internet.
+     */
+    private void bindToWifiNetwork() {
+        try {
+            connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (connectivityManager == null) return;
+
+            // First check all existing networks for an active Wi-Fi transport
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                for (Network net : connectivityManager.getAllNetworks()) {
+                    NetworkCapabilities caps = connectivityManager.getNetworkCapabilities(net);
+                    if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                        connectivityManager.bindProcessToNetwork(net);
+                        break;
+                    }
+                }
+            }
+
+            // Also register a callback so if Wi-Fi connects/reconnects to COFE_AF9B, we bind immediately
+            NetworkRequest.Builder builder = new NetworkRequest.Builder()
+                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                    .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+
+            wifiNetworkCallback = new ConnectivityManager.NetworkCallback() {
+                @Override
+                public void onAvailable(Network network) {
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            connectivityManager.bindProcessToNetwork(network);
+                        } else {
+                            ConnectivityManager.setProcessDefaultNetwork(network);
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                @Override
+                public void onLost(Network network) {
+                    try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            connectivityManager.bindProcessToNetwork(null);
+                        }
+                    } catch (Exception ignored) {}
+                }
+            };
+
+            connectivityManager.requestNetwork(builder.build(), wifiNetworkCallback);
+        } catch (Exception ignored) {}
     }
 
     private void configureWebView() {
@@ -140,6 +201,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         hideSystemUI();
+        bindToWifiNetwork();
         if (webView != null) {
             webView.onResume();
         }
@@ -154,6 +216,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        try {
+            if (connectivityManager != null && wifiNetworkCallback != null) {
+                connectivityManager.unregisterNetworkCallback(wifiNetworkCallback);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    @Override
     public void onBackPressed() {
         if (webView != null && webView.canGoBack()) {
             webView.goBack();
@@ -162,7 +234,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public static class WebAppInterface {
+    public class WebAppInterface {
         Context mContext;
 
         WebAppInterface(Context c) {
@@ -172,6 +244,11 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface
         public void showToast(String toast) {
             Toast.makeText(mContext, toast, Toast.LENGTH_SHORT).show();
+        }
+
+        @JavascriptInterface
+        public void forceWifiRoute() {
+            runOnUiThread(() -> bindToWifiNetwork());
         }
     }
 }
