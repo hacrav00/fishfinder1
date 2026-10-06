@@ -871,6 +871,9 @@ async function scanSubnetPrefix(prefix) {
 }
 
 async function autoDiscoverRov(manualTrigger = false) {
+  if (window.AndroidBridge && window.AndroidBridge.forceWifiRoute) {
+    try { window.AndroidBridge.forceWifiRoute(); } catch(e) {}
+  }
   if (isScanning && !manualTrigger) return;
   isScanning = true;
   if (manualTrigger) showIndicator("🔍 SCANNING ROUTER...");
