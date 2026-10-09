@@ -250,5 +250,23 @@ public class MainActivity extends AppCompatActivity {
         public void forceWifiRoute() {
             runOnUiThread(() -> bindToWifiNetwork());
         }
+
+        @JavascriptInterface
+        public void setHandOrientation(String mode) {
+            runOnUiThread(() -> {
+                try {
+                    if ("left_cam".equalsIgnoreCase(mode)) {
+                        // Left Hand at Camera Side, Right Hand at Charging Port Side
+                        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+                    } else if ("right_cam".equalsIgnoreCase(mode)) {
+                        // Right Hand at Camera Side, Left Hand at Charging Port Side
+                        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE);
+                    } else {
+                        // Auto-flip between both landscape grips using gravity sensor
+                        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+                    }
+                } catch (Exception ignored) {}
+            });
+        }
     }
 }
