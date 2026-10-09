@@ -860,16 +860,25 @@ function updateConnectionUI(status, textOverride) {
   isConnected = (status === "connected");
 }
 
-function setActiveHostIp(newIp) {
+let currentStreamIp = null;
+let streamHasError = false;
+let consecutiveStatusFailures = 0;
+
+function setActiveHostIp(newIp, forceReload = false) {
+  const ipChanged = (hostIp !== newIp);
   hostIp = newIp;
   localStorage.setItem("rov_ip", newIp);
   document.getElementById("btn-ip-lbl").innerText = newIp;
   document.getElementById("ip-input-field").value = newIp;
-  connectStream();
+  if (ipChanged || forceReload || currentStreamIp !== newIp || streamHasError) {
+    connectStream();
+  } else {
+    updateConnectionUI("connected", "LIVE");
+  }
 }
 
 // ── Universal Router Auto-Discovery Engine ──────────────────────────────────
-function probeSingleHost(ip, timeoutMs = 950) {
+function probeSingleHost(ip, timeoutMs = 850) {
   return new Promise((resolve) => {
     let settled = false;
     const timer = setTimeout(() => {
@@ -886,14 +895,7 @@ function probeSingleHost(ip, timeoutMs = 950) {
         }
       })
       .catch(() => {
-        const img = new Image();
-        img.onload = () => {
-          if (!settled) { settled = true; clearTimeout(timer); img.src = ""; resolve(ip); }
-        };
-        img.onerror = () => {
-          if (!settled) { settled = true; clearTimeout(timer); resolve(null); }
-        };
-        img.src = `http://${ip}:8000/stream?probe=${Date.now()}`;
+        if (!settled) { settled = true; clearTimeout(timer); resolve(null); }
       });
   });
 }
@@ -909,11 +911,12 @@ async function scanSubnetPrefix(prefix) {
   const batchSize = 25;
   for (let i = 0; i < all.length; i += batchSize) {
     const batch = all.slice(i, i + batchSize).map(last => `${prefix}.${last}`);
-    const results = await Promise.all(batch.map(ip => probeSingleHost(ip, 700)));
+    const results = await Promise.all(batch.map(ip => probeSingleHost(ip, 650)));
     const found = results.find(ip => ip !== null);
     if (found) {
       if (prog) prog.innerText = `Found ROV at ${found}!`;
-      setActiveHostIp(found);
+      setActiveHostIp(found, true);
+      updateConnectionUI("connected", "LIVE");
       closeIpModal();
       showIndicator(`✓ CONNECTED: ${found}`);
       setTimeout(hideIndicator, 1200);
@@ -930,8 +933,10 @@ async function autoDiscoverRov(manualTrigger = false) {
   }
   if (isScanning && !manualTrigger) return;
   isScanning = true;
-  if (manualTrigger) showIndicator("🔍 SCANNING ROUTER...");
-  updateConnectionUI("connecting", "SCANNING");
+  if (manualTrigger) {
+    showIndicator("🔍 SCANNING ROUTER...");
+    updateConnectionUI("connecting", "SCANNING");
+  }
 
   const priorityHosts = [...new Set([
     hostIp,
@@ -947,11 +952,13 @@ async function autoDiscoverRov(manualTrigger = false) {
     "i4mt.local"
   ])];
 
-  const fastResults = await Promise.all(priorityHosts.map(ip => probeSingleHost(ip, 900)));
+  const fastResults = await Promise.all(priorityHosts.map(ip => probeSingleHost(ip, 850)));
   const fastHit = fastResults.find(ip => ip !== null);
   if (fastHit) {
     isScanning = false;
-    setActiveHostIp(fastHit);
+    consecutiveStatusFailures = 0;
+    setActiveHostIp(fastHit, manualTrigger);
+    updateConnectionUI("connected", "LIVE");
     if (manualTrigger) {
       showIndicator(`✓ FOUND ROV: ${fastHit}`);
       setTimeout(hideIndicator, 1000);
@@ -963,6 +970,7 @@ async function autoDiscoverRov(manualTrigger = false) {
     const hit = await scanSubnetPrefix(subnet);
     if (hit) {
       isScanning = false;
+      consecutiveStatusFailures = 0;
       return;
     }
   }
@@ -975,33 +983,72 @@ async function autoDiscoverRov(manualTrigger = false) {
   }
 }
 
-// ── Stream Connection & Reconnect Loop ──────────────────────────────────────
+// ── Continuous Zero-Drop Stream Engine ──────────────────────────────────────
+let streamRetryTimer = null;
+let usingProxyPort = false;
+
 function connectStream() {
-  updateConnectionUI("connecting", "CONNECTING");
+  if (streamRetryTimer) {
+    clearTimeout(streamRetryTimer);
+    streamRetryTimer = null;
+  }
+  currentStreamIp = hostIp;
+  streamHasError = false;
+  usingProxyPort = false;
   streamImg.src = getStreamUrl();
 
   streamImg.onload = function() {
+    streamHasError = false;
+    consecutiveStatusFailures = 0;
     updateConnectionUI("connected", "LIVE");
     fpsCount++;
   };
 
   streamImg.onerror = function() {
-    streamImg.src = `http://${hostIp}:8080/stream?t=${Date.now()}`;
-    fetch(`http://${hostIp}:8080/api/status`)
-      .then(r => r.json())
-      .then(() => updateConnectionUI("connected", "LIVE"))
-      .catch(() => {
-        updateConnectionUI("disconnected", "SEARCHING");
-        autoDiscoverRov(false);
-      });
+    streamHasError = true;
+    // First try fast direct reconnect on port 8000, or fallback to port 8080 proxy without killing discovery
+    if (!usingProxyPort) {
+      usingProxyPort = true;
+      streamImg.src = `http://${hostIp}:8080/stream?t=${Date.now()}`;
+      return;
+    }
+    usingProxyPort = false;
+    if (streamRetryTimer) clearTimeout(streamRetryTimer);
+    streamRetryTimer = setTimeout(() => {
+      if (isConnected) {
+        // Quick seamless stream resume (e.g. after a servo 5V voltage dip)
+        streamImg.src = getStreamUrl();
+      }
+    }, 350);
   };
 }
 
+// Lightweight non-disruptive heartbeat: NEVER resets streamImg.src while Pi is reachable!
 setInterval(() => {
-  if (!isConnected && !isScanning) {
-    autoDiscoverRov(false);
+  if (streamImg.naturalWidth > 0 && !streamHasError) {
+    updateConnectionUI("connected", "LIVE");
   }
-}, 8000);
+  fetch(`http://${hostIp}:8080/api/status`)
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(d => {
+      if (d && d.status === "ok") {
+        consecutiveStatusFailures = 0;
+        updateConnectionUI("connected", "LIVE");
+        // Only restart streamImg if it had an error or hasn't received any frame yet
+        if (streamHasError || streamImg.naturalWidth === 0) {
+          streamHasError = false;
+          streamImg.src = getStreamUrl();
+        }
+      }
+    })
+    .catch(() => {
+      consecutiveStatusFailures++;
+      if (consecutiveStatusFailures >= 3 && !isScanning) {
+        updateConnectionUI("disconnected", "SEARCHING");
+        autoDiscoverRov(false);
+      }
+    });
+}, 4000);
 
 // ── Autofocus & Zoom Controls ───────────────────────────────────────────────
 function triggerAutofocus() {
@@ -1316,31 +1363,50 @@ function sendTiltAction(act) {
   postTilt({action: effectiveAct});
 }
 
-function triggerPanTimed(dir) {
+let panStepInFlight = false;
+
+async function triggerPanTimed(dir) {
+  if (panStepInFlight) return;
+  panStepInFlight = true;
+
   const effectiveDir = invertPan ? (dir === 'left' ? 'right' : 'left') : dir;
+  // Use extreme 0° (600µs) for Left and 180° (2400µs) for Right so any internal
+  // potentiometer position between 1° and 179° in the modified 360° SG90 reverses cleanly!
+  const targetAngle = (effectiveDir === 'left') ? 0 : 180;
   const durSec = +(panStepMs / 1000).toFixed(3);
   const estDeg = Math.max(3, Math.round(panStepMs * 0.25));
 
   showIndicator(dir === 'left' ? `◀ STEP LEFT (~${estDeg}°)` : `STEP RIGHT (~${estDeg}°) ▶`);
-  updateLabels(dir === 'left' ? 75 : 105, undefined);
+  updateLabels(targetAngle, undefined);
 
-  // Send micro-pulse duration to Pi (Pi's hardware timer cuts off PWM after durSec)
-  postPan({action: effectiveDir, duration: durSec});
+  try {
+    await fetch(getApiUrl('/api/pan'), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({angle: targetAngle, duration: durSec})
+    });
+  } catch (e) {}
 
-  // Redundant client-side stop safeguard
-  if (panStopBackupTimer) clearTimeout(panStopBackupTimer);
-  panStopBackupTimer = setTimeout(() => {
-    postPan({angle: 90});
-    updateLabels(90, undefined);
-    setTimeout(hideIndicator, 300);
-  }, panStepMs + 35);
+  await new Promise(r => setTimeout(r, panStepMs));
+
+  try {
+    await fetch(getApiUrl('/api/pan'), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({angle: 90})
+    });
+  } catch (e) {}
+
+  updateLabels(90, undefined);
+  panStepInFlight = false;
+  setTimeout(hideIndicator, 250);
 }
 
 function startPanHold(dir, ev) {
   if (ev) ev.preventDefault();
   stopPanHold();
   triggerPanTimed(dir);
-  const repeatInterval = Math.max(200, panStepMs + 165);
+  const repeatInterval = Math.max(220, panStepMs + 170);
   panHoldInterval = setInterval(() => {
     triggerPanTimed(dir);
   }, repeatInterval);
@@ -1350,9 +1416,9 @@ function stopPanHold() {
   if (panHoldInterval) {
     clearInterval(panHoldInterval);
     panHoldInterval = null;
-    postPan({angle: 90});
-    updateLabels(90, undefined);
   }
+  postPan({angle: 90});
+  updateLabels(90, undefined);
 }
 
 function triggerPanStop() {
@@ -1602,9 +1668,13 @@ function saveIpSettings() {
 
 // Start connection & router auto-discovery on launch
 connectStream();
-setTimeout(() => {
-  if (!isConnected) autoDiscoverRov(false);
-}, 1200);
+probeSingleHost(hostIp, 900).then(hit => {
+  if (hit) {
+    updateConnectionUI("connected", "LIVE");
+  } else {
+    autoDiscoverRov(false);
+  }
+});
 </script>
 </body>
 </html>
