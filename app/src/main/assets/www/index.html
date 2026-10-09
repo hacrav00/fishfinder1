@@ -811,28 +811,28 @@
       <!-- 300° / 330° Servo Lock & Left/Right Independent Micro-Step Calibration Card -->
       <div class="slider-card">
         <div class="slider-header">
-          <span>Left (◀) Step vs Right (▶) Slow Step</span>
-          <span id="drawer-step-val" class="slider-val">L:20ms | R:10ms (104°) | 🛡️300°</span>
+          <span>Left (◀) Step vs Right (▶) Balanced Step</span>
+          <span id="drawer-step-val" class="slider-val">L:22ms | R:14ms | 🛡️0°–300°</span>
         </div>
         <div style="display:flex; align-items:center; gap:6px; font-size:10px; color:#94a3b8;">
           <span style="min-width:52px;">◀ Left ms:</span>
-          <input type="range" id="drawer-step-slider" min="8" max="100" step="2" value="20" oninput="onPanStepSizeChange(this.value)">
+          <input type="range" id="drawer-step-slider" min="10" max="100" step="2" value="22" oninput="onPanStepSizeChange(this.value)">
         </div>
         <div style="display:flex; align-items:center; gap:6px; font-size:10px; color:#94a3b8;">
           <span style="min-width:52px;">▶ Right ms:</span>
-          <input type="range" id="drawer-rstep-slider" min="6" max="80" step="1" value="10" oninput="onPanRightStepChange(this.value)">
+          <input type="range" id="drawer-rstep-slider" min="8" max="80" step="1" value="14" oninput="onPanRightStepChange(this.value)">
         </div>
         <div class="preset-row">
-          <span class="preset-btn" id="btn-300-drawer" onclick="setPanLimitMode(300)" style="border-color:var(--accent); color:var(--accent); font-weight:bold;">🛡️ 300° Lock (±150°)</span>
-          <span class="preset-btn" id="btn-330-drawer" onclick="setPanLimitMode(330)">🛡️ 330° Lock (±165°)</span>
+          <span class="preset-btn" id="btn-300-drawer" onclick="setPanLimitMode(300)" style="border-color:var(--accent); color:var(--accent); font-weight:bold;">🛡️ 300° Lock (0°–300°)</span>
+          <span class="preset-btn" id="btn-330-drawer" onclick="setPanLimitMode(330)">🛡️ 330° Lock (0°–330°)</span>
           <span class="preset-btn" id="btn-free-drawer" onclick="setPanLimitMode(0)">🔓 360° Free</span>
-          <span class="preset-btn" onclick="zeroPanHeading()">📌 Set 0° Here</span>
-          <span class="preset-btn" onclick="unwindPanToZero()">↩ Unwind 0°</span>
+          <span class="preset-btn" onclick="zeroPanHeading()">📌 Set 150° Here</span>
+          <span class="preset-btn" onclick="unwindPanToZero()">↩ Move to 150°</span>
         </div>
         <div class="preset-row" style="margin-top:4px;">
-          <span class="preset-btn" onclick="setRightCalibration(8, 102)">▶ Ultra-Slow R (8ms)</span>
-          <span class="preset-btn" onclick="setRightCalibration(10, 104)" style="color:var(--accent); font-weight:bold;">▶ Gentle R (10ms)</span>
-          <span class="preset-btn" onclick="setRightCalibration(14, 110)">▶ Med R (14ms)</span>
+          <span class="preset-btn" onclick="setRightCalibration(11, 172)">▶ Gentle R (11ms)</span>
+          <span class="preset-btn" onclick="setRightCalibration(14, 175)" style="color:var(--accent); font-weight:bold;">▶ Balanced R (14ms)</span>
+          <span class="preset-btn" onclick="setRightCalibration(20, 180)">▶ Strong R (20ms)</span>
           <span class="preset-btn" id="btn-touch-lock" onclick="toggleTouchSwipeLock()" style="border-color:var(--accent); color:var(--accent); font-weight:bold;">👆 Touch Gesture: ON</span>
         </div>
       </div>
@@ -996,25 +996,22 @@ let recSeconds = 0;
 // 300° / 330° Movement Lock, Left/Right Speed Balance & 360° Ring Slider State
 let panLimitDeg = parseInt(localStorage.getItem("rov_pan_limit_deg") || "300", 10);
 if (panLimitDeg !== 300 && panLimitDeg !== 330 && panLimitDeg !== 0) panLimitDeg = 300;
-let panVirtualDeg = parseFloat(localStorage.getItem("rov_pan_virtual_deg") || "0");
-if (isNaN(panVirtualDeg) || panVirtualDeg < -180 || panVirtualDeg > 180) panVirtualDeg = 0;
-if (panLimitDeg > 0) {
-  const halfL = panLimitDeg / 2;
-  panVirtualDeg = Math.max(-halfL, Math.min(halfL, panVirtualDeg));
-}
-let panTargetDeg = panVirtualDeg;
+// Start at 0 (150° center on the 0°–300° ring) on app launch so servo is never stuck at a 0°/300° limit from a prior session
+let panVirtualDeg = 0;
+localStorage.setItem("rov_pan_virtual_deg", "0");
+let panTargetDeg = 0;
 let ringDialVisible = localStorage.getItem("rov_ring_visible") !== "0";
 let ringSeekActive = false;
 let isDraggingRing = false;
 
 let precisionMode = localStorage.getItem("rov_precision_mode") !== "0";
-let panStepMs = parseInt(localStorage.getItem("rov_pan_step_ms") || "20", 10);
-if (isNaN(panStepMs) || panStepMs < 8 || panStepMs > 250) panStepMs = 20;
-// Dedicated slower/shorter Right-side pulse & gentler PWM angle so Right never jumps fast or at huge angles!
-let panRightStepMs = parseInt(localStorage.getItem("rov_pan_rstep_ms") || "10", 10);
-if (isNaN(panRightStepMs) || panRightStepMs < 6 || panRightStepMs > 200) panRightStepMs = 10;
-let panRightPwmDeg = parseInt(localStorage.getItem("rov_pan_rpwm_deg") || "104", 10);
-if (isNaN(panRightPwmDeg) || panRightPwmDeg < 98 || panRightPwmDeg > 180) panRightPwmDeg = 104;
+let panStepMs = parseInt(localStorage.getItem("rov_pan_lstep_v3") || "22", 10);
+if (isNaN(panStepMs) || panStepMs < 10 || panStepMs > 250) panStepMs = 22;
+// Dedicated balanced Right-side pulse (14ms at 175° = 2350µs high starting torque so servo ALWAYS moves, without overshooting!)
+let panRightStepMs = parseInt(localStorage.getItem("rov_pan_rstep_v3") || "14", 10);
+if (isNaN(panRightStepMs) || panRightStepMs < 8 || panRightStepMs > 200) panRightStepMs = 14;
+let panRightPwmDeg = parseInt(localStorage.getItem("rov_pan_rpwm_v3") || "175", 10);
+if (isNaN(panRightPwmDeg) || panRightPwmDeg < 155 || panRightPwmDeg > 180) panRightPwmDeg = 175;
 
 let tiltStepDeg = parseFloat(localStorage.getItem("rov_tilt_step_deg") || "1");
 if (isNaN(tiltStepDeg) || tiltStepDeg < 0.5 || tiltStepDeg > 15) tiltStepDeg = 1;
@@ -1801,26 +1798,26 @@ async function unwindPanToZero() {
 }
 
 function onPanStepSizeChange(ms) {
-  panStepMs = Math.max(8, Math.min(200, parseInt(ms, 10) || 20));
-  localStorage.setItem("rov_pan_step_ms", String(panStepMs));
+  panStepMs = Math.max(10, Math.min(200, parseInt(ms, 10) || 22));
+  localStorage.setItem("rov_pan_lstep_v3", String(panStepMs));
   syncPrecisionUI();
 }
 
 function onPanRightStepChange(ms) {
-  panRightStepMs = Math.max(6, Math.min(150, parseInt(ms, 10) || 10));
-  localStorage.setItem("rov_pan_rstep_ms", String(panRightStepMs));
+  panRightStepMs = Math.max(8, Math.min(150, parseInt(ms, 10) || 14));
+  localStorage.setItem("rov_pan_rstep_v3", String(panRightStepMs));
   syncPrecisionUI();
-  showIndicator(`▶ RIGHT 10° CALIBRATION: ${panRightStepMs}ms`);
+  showIndicator(`▶ RIGHT STEP CALIBRATION: ${panRightStepMs}ms`);
   setTimeout(hideIndicator, 800);
 }
 
 function setRightCalibration(ms, pwmDeg) {
-  panRightStepMs = Math.max(6, Math.min(150, parseInt(ms, 10) || 10));
-  panRightPwmDeg = Math.max(98, Math.min(180, parseInt(pwmDeg, 10) || 104));
-  localStorage.setItem("rov_pan_rstep_ms", String(panRightStepMs));
-  localStorage.setItem("rov_pan_rpwm_deg", String(panRightPwmDeg));
+  panRightStepMs = Math.max(8, Math.min(150, parseInt(ms, 10) || 14));
+  panRightPwmDeg = Math.max(155, Math.min(180, parseInt(pwmDeg, 10) || 175));
+  localStorage.setItem("rov_pan_rstep_v3", String(panRightStepMs));
+  localStorage.setItem("rov_pan_rpwm_v3", String(panRightPwmDeg));
   syncPrecisionUI();
-  showIndicator(`▶ RIGHT CALIBRATED: ${panRightStepMs}ms Slow Step`);
+  showIndicator(`▶ RIGHT CALIBRATED: ${panRightStepMs}ms (${panRightPwmDeg}°)`);
   setTimeout(hideIndicator, 900);
 }
 
@@ -1867,16 +1864,16 @@ function togglePrecisionMode() {
     precisionMode = false;
     localStorage.setItem("rov_precision_mode", "0");
     onPanStepSizeChange(32);
-    setRightCalibration(15, 108);
+    setRightCalibration(20, 180);
     setTiltStepSize(2);
-    showIndicator("⚡ NORMAL MODE: 2° Tilt | L:32ms / R:15ms");
+    showIndicator("⚡ NORMAL MODE: 2° Tilt | L:32ms / R:20ms");
   } else {
     precisionMode = true;
     localStorage.setItem("rov_precision_mode", "1");
-    onPanStepSizeChange(20);
-    setRightCalibration(10, 104);
+    onPanStepSizeChange(22);
+    setRightCalibration(14, 175);
     setTiltStepSize(1);
-    showIndicator("🔬 ULTRA-FINE: 1° Tilt | L:20ms / R:10ms Slow");
+    showIndicator("🔬 ULTRA-FINE: 1° Tilt | L:22ms / R:14ms Balanced");
   }
   setTimeout(hideIndicator, 1000);
 }
@@ -1915,13 +1912,15 @@ async function runRingSeekLoop() {
       const dir = diff > 0 ? 'right' : 'left';
       // Move in exact 10° steps (or the remaining degrees if < 10°) so moving needle 10° moves servo 10°!
       const stepDegWanted = Math.min(10, Math.abs(diff));
-      // Duration for 10° step is scaled from user's Left/Right step calibration
-      const msFor10Deg = (dir === 'left') ? Math.round(panStepMs * 1.5) : Math.round(panRightStepMs * 1.8);
-      const pulseMs = Math.max(8, Math.round((stepDegWanted / 10) * msFor10Deg));
+      // Duration for 10° step with full starting torque so every 10° needle move reliably turns the physical servo!
+      const msFor10Deg = (dir === 'left')
+        ? Math.max(32, Math.round(panStepMs * 1.5))
+        : Math.max(22, Math.round(panRightStepMs * 1.5));
+      const pulseMs = Math.max(14, Math.round((stepDegWanted / 10) * msFor10Deg));
       await triggerPanTimed(dir, pulseMs, true, stepDegWanted);
     }
     guardSteps++;
-    await new Promise(r => setTimeout(r, 85));
+    await new Promise(r => setTimeout(r, 95));
   }
   if (ringSeekActive) {
     ringSeekActive = false;
@@ -2121,7 +2120,7 @@ window.addEventListener('mousemove', e => {
 });
 window.addEventListener('mouseup', handleSwipeEnd);
 
-// ── Servo API Calls (Hardware-Timed on Pi + Right Slow Balance + Ring Sync) ──
+// ── Servo API Calls (Full Starting Torque {angle} + Balanced R Step + Ring Sync) ──
 function forcePanStopImmediate() {
   if (panStopBackupTimer) {
     clearTimeout(panStopBackupTimer);
@@ -2131,14 +2130,14 @@ function forcePanStopImmediate() {
   fetch(getApiUrl('/api/pan'), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({action: 'stop'})
+    body: JSON.stringify({angle: 90})
   }).catch(() => {});
   // Double-confirm stop 70ms later so out-of-order Wi-Fi packets can NEVER leave the servo spinning
   panStopBackupTimer = setTimeout(() => {
     fetch(getApiUrl('/api/pan'), {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({action: 'stop'})
+      body: JSON.stringify({angle: 90})
     }).catch(() => {});
     updateLabels(90, undefined);
   }, 70);
@@ -2227,9 +2226,9 @@ async function triggerPanTimed(dir, customMs, fromRingSeek, customDegDelta) {
     ringSeekActive = false;
   }
 
-  // Use shorter pulse for Right ('right') so Right NEVER moves too fast or at huge angles!
+  // Use shorter pulse for Right ('right') with full starting torque (175° = 2350µs) so Right always moves reliably without jumping!
   const defaultMs = (dir === 'left') ? panStepMs : panRightStepMs;
-  const degPerMs = (dir === 'left') ? 0.16 : 0.28;
+  const degPerMs = (dir === 'left') ? 0.16 : 0.25;
   let stepMs = customMs || defaultMs;
   let estDeg = customDegDelta ? +customDegDelta.toFixed(1) : Math.max(1.5, +(stepMs * degPerMs).toFixed(1));
   const deltaSign = (dir === 'left') ? -1 : 1;
@@ -2242,16 +2241,16 @@ async function triggerPanTimed(dir, customMs, fromRingSeek, customDegDelta) {
       if (panHoldInterval) { clearInterval(panHoldInterval); panHoldInterval = null; }
       ringSeekActive = false;
       forcePanStopImmediate();
-      showIndicator(`🛡️ 0° LEFT LIMIT REACHED! Move Right ▶`);
-      setTimeout(hideIndicator, 900);
+      showIndicator(`🛡️ 0° LEFT LIMIT REACHED! Tap [📌 Set 150°] or Move Right ▶`);
+      setTimeout(hideIndicator, 1000);
       return;
     }
     if (deltaSign > 0 && panVirtualDeg >= halfLim) {
       if (panHoldInterval) { clearInterval(panHoldInterval); panHoldInterval = null; }
       ringSeekActive = false;
       forcePanStopImmediate();
-      showIndicator(`🛡️ ${maxD}° RIGHT LIMIT REACHED! Move Left ◀`);
-      setTimeout(hideIndicator, 900);
+      showIndicator(`🛡️ ${maxD}° RIGHT LIMIT REACHED! Tap [📌 Set 150°] or Move Left ◀`);
+      setTimeout(hideIndicator, 1000);
       return;
     }
     const remainingDeg = (deltaSign < 0)
@@ -2259,59 +2258,64 @@ async function triggerPanTimed(dir, customMs, fromRingSeek, customDegDelta) {
       : (halfLim - panVirtualDeg);
     if (estDeg > remainingDeg) {
       estDeg = +remainingDeg.toFixed(1);
-      stepMs = Math.max(6, Math.round(estDeg / degPerMs));
+      stepMs = Math.max(10, Math.round(estDeg / degPerMs));
     }
   }
 
   panStepInFlight = true;
-  panVirtualDeg = +(panVirtualDeg + deltaSign * estDeg).toFixed(1);
-  if (panLimitDeg > 0) {
-    panVirtualDeg = Math.max(-halfLim, Math.min(halfLim, panVirtualDeg));
-  }
-  if (!fromRingSeek) {
-    panTargetDeg = panVirtualDeg;
-  }
-  localStorage.setItem("rov_pan_virtual_deg", String(panVirtualDeg));
-
-  const effectiveDir = invertPan ? (dir === 'left' ? 'right' : 'left') : dir;
-  const durSec = +(stepMs / 1000).toFixed(3);
-  const camRingDeg = virtualToRingDeg(panVirtualDeg);
-
-  showIndicator(dir === 'left' ? `◀ LEFT (${camRingDeg}° / ${maxD}°)` : `RIGHT (${camRingDeg}° / ${maxD}°) ▶`);
-  updateLabels(effectiveDir === 'left' ? 40 : 140, undefined);
-
-  // 1. Send hardware-timed {action: 'left'|'right', duration: durSec} so Raspberry Pi's own internal timer stops the motor without Wi-Fi lag!
   try {
-    const ctrl = new AbortController();
-    const tId = setTimeout(() => ctrl.abort(), 600);
-    await fetch(getApiUrl('/api/pan'), {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({action: effectiveDir, duration: durSec}),
-      signal: ctrl.signal
-    });
-    clearTimeout(tId);
-  } catch (e) {}
+    panVirtualDeg = +(panVirtualDeg + deltaSign * estDeg).toFixed(1);
+    if (panLimitDeg > 0) {
+      panVirtualDeg = Math.max(-halfLim, Math.min(halfLim, panVirtualDeg));
+    }
+    if (!fromRingSeek) {
+      panTargetDeg = panVirtualDeg;
+    }
+    localStorage.setItem("rov_pan_virtual_deg", String(panVirtualDeg));
 
-  // 2. Wait for stepMs milliseconds
-  await new Promise(r => setTimeout(r, stepMs));
+    const effectiveDir = invertPan ? (dir === 'left' ? 'right' : 'left') : dir;
+    const targetAngle = (effectiveDir === 'left') ? 0 : panRightPwmDeg;
+    const durSec = +(stepMs / 1000).toFixed(3);
+    const camRingDeg = virtualToRingDeg(panVirtualDeg);
 
-  // 3. Strictly AWAIT explicit stop confirmation
-  try {
-    const ctrl2 = new AbortController();
-    const tId2 = setTimeout(() => ctrl2.abort(), 600);
-    await fetch(getApiUrl('/api/pan'), {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({action: 'stop'}),
-      signal: ctrl2.signal
-    });
-    clearTimeout(tId2);
-  } catch (e) {}
+    showIndicator(dir === 'left' ? `◀ LEFT (${camRingDeg}° / ${maxD}°)` : `RIGHT (${camRingDeg}° / ${maxD}°) ▶`);
+    updateLabels(targetAngle, undefined);
 
-  // 4. Send a second safety stop confirmation so PWM is guaranteed OFF
-  forcePanStopImmediate();
-  panStepInFlight = false;
+    // 1. Strictly AWAIT the start request ({angle: 0} for Left, {angle: 175} for Right) so servo gets full starting torque!
+    try {
+      const ctrl = new AbortController();
+      const tId = setTimeout(() => ctrl.abort(), 600);
+      await fetch(getApiUrl('/api/pan'), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({angle: targetAngle, duration: durSec}),
+        signal: ctrl.signal
+      });
+      clearTimeout(tId);
+    } catch (e) {}
+
+    // 2. Hold for stepMs milliseconds
+    await new Promise(r => setTimeout(r, stepMs));
+
+    // 3. Strictly AWAIT the stop request ({angle: 90})
+    try {
+      const ctrl2 = new AbortController();
+      const tId2 = setTimeout(() => ctrl2.abort(), 600);
+      await fetch(getApiUrl('/api/pan'), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({angle: 90}),
+        signal: ctrl2.signal
+      });
+      clearTimeout(tId2);
+    } catch (e) {}
+
+    // 4. Send a second safety stop confirmation so PWM is guaranteed OFF
+    forcePanStopImmediate();
+  } finally {
+    panStepInFlight = false;
+  }
+
   if (!fromRingSeek) {
     setTimeout(hideIndicator, 250);
   }
