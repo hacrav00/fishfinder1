@@ -556,6 +556,7 @@
     <div class="header-right">
       <button class="btn-top accent" onclick="autoDiscoverRov(true)">🔍 Auto-Find</button>
       <button class="btn-top" onclick="openIpModal()">🌐 <span id="btn-ip-lbl">192.168.150.131</span></button>
+      <button class="btn-top" onclick="cycleHandGrip()" title="Flip Screen for Left/Right Hand Grip">📱 <span id="btn-grip-lbl">L-Cam</span></button>
       <button class="btn-top" onclick="recenterAll()">⨁ Center</button>
       <button class="btn-top" onclick="toggleSettingsDrawer()">⚙️ Sliders</button>
     </div>
@@ -669,11 +670,16 @@
         </div>
       </div>
 
-      <!-- Container Hanging Mount & Camera Display Orientation Card -->
+      <!-- Phone Hand Grip & Container Hanging Orientation Card -->
       <div class="slider-card">
         <div class="slider-header">
-          <span>Container Hanging & Display Rotation</span>
-          <span id="drawer-rot-val" class="slider-val">0° Normal</span>
+          <span>Phone Hand Grip & Camera Rotation</span>
+          <span id="drawer-rot-val" class="slider-val">0° | L-Hand Cam</span>
+        </div>
+        <div class="preset-row" style="margin-top:4px;">
+          <span class="preset-btn" onclick="setHandGrip('left_cam')" style="color:var(--accent); font-weight:bold;">📱 L-Hand=Cam / R=Charge</span>
+          <span class="preset-btn" onclick="setHandGrip('right_cam')">📱 R-Hand=Cam / L=Charge</span>
+          <span class="preset-btn" onclick="setHandGrip('auto')">📱 Auto Sensor</span>
         </div>
         <div class="preset-row" style="margin-top:4px;">
           <span class="preset-btn" onclick="setCameraRotation(0)">0° Upright</span>
@@ -827,6 +833,7 @@ let flipH = localStorage.getItem("rov_flip_h") === "1";
 let flipV = localStorage.getItem("rov_flip_v") === "1";
 let invertPan = localStorage.getItem("rov_inv_pan") === "1";
 let invertTilt = localStorage.getItem("rov_inv_tilt") === "1";
+let handGripMode = localStorage.getItem("rov_hand_grip") || "left_cam";
 
 let panTimer = null;
 let tiltTimer = null;
@@ -1123,13 +1130,16 @@ function onZoomInput(val) {
   setZoom(parseInt(val) / 10);
 }
 
-// ── Container Hanging Camera Orientation & Flip Controls ────────────────────
+// ── Container Hanging Camera Orientation & Hand Grip Controls ───────────────
 function syncOrientationUI() {
   const rotLbl = document.getElementById("hud-rot-lbl");
   if (rotLbl) rotLbl.innerText = `${camRotate}°`;
+  const gripLbl = document.getElementById("btn-grip-lbl");
+  const gripShort = handGripMode === "left_cam" ? "L-Cam" : (handGripMode === "right_cam" ? "R-Cam" : "Auto");
+  if (gripLbl) gripLbl.innerText = gripShort;
   const drawerRot = document.getElementById("drawer-rot-val");
   if (drawerRot) {
-    let modeTag = camRotate === 180 ? "180° (Hanging)" : `${camRotate}°`;
+    let modeTag = `${camRotate}° | ${gripShort}`;
     if (flipV) modeTag += " +FlipV";
     if (flipH) modeTag += " +MirrorH";
     drawerRot.innerText = modeTag;
@@ -1144,7 +1154,27 @@ function syncOrientationUI() {
   if (ipBtn) ipBtn.style.borderColor = invertPan ? "var(--accent)" : "";
   const itBtn = document.getElementById("btn-inv-tilt");
   if (itBtn) itBtn.style.borderColor = invertTilt ? "var(--accent)" : "";
+  if (window.AndroidBridge && window.AndroidBridge.setHandOrientation) {
+    try { window.AndroidBridge.setHandOrientation(handGripMode); } catch (e) {}
+  }
   applyImageTransform();
+}
+
+function setHandGrip(mode) {
+  handGripMode = mode;
+  localStorage.setItem("rov_hand_grip", mode);
+  syncOrientationUI();
+  const desc = mode === "left_cam"
+    ? "📱 L-HAND: CAMERA | R-HAND: CHARGE PORT"
+    : (mode === "right_cam" ? "📱 R-HAND: CAMERA | L-HAND: CHARGE PORT" : "📱 AUTO SENSOR GRIP");
+  showIndicator(desc);
+  setTimeout(hideIndicator, 1100);
+}
+
+function cycleHandGrip() {
+  const order = ["left_cam", "right_cam", "auto"];
+  const next = order[(order.indexOf(handGripMode) + 1) % order.length];
+  setHandGrip(next);
 }
 
 function setCameraRotation(deg) {
