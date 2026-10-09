@@ -556,6 +556,7 @@
     <div class="header-right">
       <button class="btn-top accent" onclick="autoDiscoverRov(true)">🔍 Auto-Find</button>
       <button class="btn-top" onclick="openIpModal()">🌐 <span id="btn-ip-lbl">192.168.150.131</span></button>
+      <button class="btn-top active" id="btn-fine-mode" onclick="togglePrecisionMode()" title="Toggle Ultra-Fine 1° / Micro-Pulse Precision Mode">🔬 <span id="btn-fine-lbl">Fine 1°</span></button>
       <button class="btn-top" onclick="cycleHandGrip()" title="Flip Screen for Left/Right Hand Grip">📱 <span id="btn-grip-lbl">L-Cam</span></button>
       <button class="btn-top" onclick="recenterAll()">⨁ Center</button>
       <button class="btn-top" onclick="toggleSettingsDrawer()">⚙️ Sliders</button>
@@ -589,10 +590,10 @@
 
     <!-- Position HUD -->
     <div id="hud-info">
-      Pan: <b id="lbl-pan">STOPPED</b> (<span id="lbl-step-ms">40ms</span>) &nbsp;|&nbsp; Tilt: <b id="lbl-tilt">90°</b> &nbsp;|&nbsp; Zoom: <b id="lbl-zoom">1.0x</b>
+      Pan: <b id="lbl-pan">STOPPED</b> (<span id="lbl-step-ms">18ms</span>) &nbsp;|&nbsp; Tilt: <b id="lbl-tilt">90°</b> (<span id="lbl-tilt-step">1°</span>) &nbsp;|&nbsp; Zoom: <b id="lbl-zoom">1.0x</b>
     </div>
     <div id="hud-hint">
-      👆 Drag Little-by-Little to Step 360° | Pinch to Zoom
+      🔬 Ultra-Fine Mode: 1° Tilt &amp; Braked 360° Micro-Ticks | Pinch to Zoom
     </div>
   </div>
 
@@ -611,6 +612,10 @@
       <button class="btn-action" onclick="stepZoom(-0.5)">
         <span class="icon">🔍-</span>
         <span>Zoom Out</span>
+      </button>
+      <button class="btn-action active" id="btn-fine-bottom" onclick="togglePrecisionMode()">
+        <span class="icon">🔬</span>
+        <span id="lbl-fine-btn">Fine 1°</span>
       </button>
       <button class="btn-action" id="btn-hang-flip" onclick="toggleHangingMode()">
         <span class="icon">🙃</span>
@@ -634,16 +639,16 @@
       </button>
     </div>
 
-    <!-- Quick D-Pad (Tap for single micro-step, Hold for slow step-by-step ticks) -->
+    <!-- Quick D-Pad (Tap for single 1° / micro-tick, Hold for smooth precision stepping) -->
     <div class="dpad-container">
       <div></div>
-      <div class="dpad-btn" onclick="sendTiltAction('up')">▲</div>
+      <div class="dpad-btn" onpointerdown="startTiltHold('up', event)" onpointerup="stopTiltHold()" onpointerleave="stopTiltHold()" onpointercancel="stopTiltHold()">▲</div>
       <div></div>
       <div class="dpad-btn" id="dpad-left" onpointerdown="startPanHold('left', event)" onpointerup="stopPanHold()" onpointerleave="stopPanHold()" onpointercancel="stopPanHold()">◀</div>
       <div class="dpad-btn dpad-center" onclick="recenterAll()">⨁</div>
       <div class="dpad-btn" id="dpad-right" onpointerdown="startPanHold('right', event)" onpointerup="stopPanHold()" onpointerleave="stopPanHold()" onpointercancel="stopPanHold()">▶</div>
       <div></div>
-      <div class="dpad-btn" onclick="sendTiltAction('down')">▼</div>
+      <div class="dpad-btn" onpointerdown="startTiltHold('down', event)" onpointerup="stopTiltHold()" onpointerleave="stopTiltHold()" onpointercancel="stopTiltHold()">▼</div>
       <div></div>
     </div>
   </div>
@@ -651,29 +656,30 @@
   <!-- Settings & Sliders Slide-up Drawer -->
   <div id="settings-drawer">
     <div class="drawer-header">
-      <div class="drawer-title">🎛️ ROV Camera, Hanging Mount & 360° Micro-Step Controls</div>
+      <div class="drawer-title">🎛️ ROV Ultra-Fine Motor Precision, Hanging Mount &amp; Camera Controls</div>
       <button class="btn-close" onclick="toggleSettingsDrawer()">✕</button>
     </div>
     <div class="drawer-grid">
-      <!-- 360° Pan Micro-Step ("Little by Little") Calibration Card -->
+      <!-- 360° Pan Micro-Step ("Little by Little") + Electronic Brake Calibration Card -->
       <div class="slider-card">
         <div class="slider-header">
-          <span>360° Pan Step Size (Little-by-Little)</span>
-          <span id="drawer-step-val" class="slider-val">40 ms (~10°)</span>
+          <span>360° Pan Micro-Pulse &amp; Active Brake</span>
+          <span id="drawer-step-val" class="slider-val">18 ms (~2°) + Brake</span>
         </div>
-        <input type="range" id="drawer-step-slider" min="15" max="150" step="5" value="40" oninput="onPanStepSizeChange(this.value)">
+        <input type="range" id="drawer-step-slider" min="8" max="120" step="2" value="18" oninput="onPanStepSizeChange(this.value)">
         <div class="preset-row">
-          <span class="preset-btn" onclick="onPanStepSizeChange(25)">Fine 25ms (~5°)</span>
-          <span class="preset-btn" onclick="onPanStepSizeChange(40)" style="color:var(--accent); font-weight:bold;">Default 40ms (~10°)</span>
-          <span class="preset-btn" onclick="onPanStepSizeChange(65)">Small 65ms (~20°)</span>
-          <span class="preset-btn" onclick="onPanStepSizeChange(100)">Med 100ms (~35°)</span>
+          <span class="preset-btn" onclick="onPanStepSizeChange(10)">Ultra 10ms (~1.5°)</span>
+          <span class="preset-btn" onclick="onPanStepSizeChange(18)" style="color:var(--accent); font-weight:bold;">Fine 18ms (~2.5°)</span>
+          <span class="preset-btn" onclick="onPanStepSizeChange(30)">Small 30ms (~5°)</span>
+          <span class="preset-btn" onclick="onPanStepSizeChange(55)">Med 55ms (~12°)</span>
+          <span class="preset-btn" id="btn-pan-brake" onclick="togglePanBrake()" style="border-color:var(--accent); color:var(--accent); font-weight:bold;">🛑 Brake: ON</span>
         </div>
       </div>
 
       <!-- Phone Hand Grip & Container Hanging Orientation Card -->
       <div class="slider-card">
         <div class="slider-header">
-          <span>Phone Hand Grip & Camera Rotation</span>
+          <span>Phone Hand Grip &amp; Camera Rotation</span>
           <span id="drawer-rot-val" class="slider-val">0° | L-Hand Cam</span>
         </div>
         <div class="preset-row" style="margin-top:4px;">
@@ -734,20 +740,25 @@
         </div>
         <input type="range" id="drawer-pan-slider" min="0" max="180" value="90" oninput="onPanSliderInput(this.value)">
         <div class="preset-row">
+          <span class="preset-btn" onclick="triggerPanTimed('left', 10)">◀ 10ms Nudge</span>
           <span class="preset-btn" onclick="triggerPanTimed('left')">◀ Step Left</span>
           <span class="preset-btn" onclick="triggerPanStop()" style="color:var(--accent); font-weight:bold;">⏹ STOP</span>
           <span class="preset-btn" onclick="triggerPanTimed('right')">Step Right ▶</span>
+          <span class="preset-btn" onclick="triggerPanTimed('right', 10)">10ms Nudge ▶</span>
         </div>
       </div>
 
-      <!-- Tilt Positional Slider -->
+      <!-- Tilt Precision Positional Slider (1° Step Resolution) -->
       <div class="slider-card">
         <div class="slider-header">
-          <span>Tilt (0°–180° Positional Servo)</span>
+          <span>Tilt Precision (0°–180° | Step: <span id="drawer-tilt-step-lbl">1°</span>)</span>
           <span id="drawer-tilt-val" class="slider-val">90° Level</span>
         </div>
-        <input type="range" id="drawer-tilt-slider" min="0" max="180" value="90" oninput="onTiltSliderInput(this.value)">
+        <input type="range" id="drawer-tilt-slider" min="0" max="180" step="1" value="90" oninput="onTiltSliderInput(this.value)">
         <div class="preset-row">
+          <span class="preset-btn" id="tstep-1" onclick="setTiltStepSize(1)" style="color:var(--accent); font-weight:bold;">🔬 1° Fine</span>
+          <span class="preset-btn" id="tstep-2" onclick="setTiltStepSize(2)">2° Step</span>
+          <span class="preset-btn" id="tstep-5" onclick="setTiltStepSize(5)">5° Step</span>
           <span class="preset-btn" onclick="setTiltDirect(0)">0° Down</span>
           <span class="preset-btn" onclick="setTiltDirect(90)">90° Level</span>
           <span class="preset-btn" onclick="setTiltDirect(180)">180° Up</span>
@@ -820,10 +831,15 @@ let recordedChunks = [];
 let recTimerInterval = null;
 let recSeconds = 0;
 
-// 360° Micro-Step ("Little-by-Little") State (default 40ms pulse per step)
-let panStepMs = parseInt(localStorage.getItem("rov_pan_step_ms") || "40", 10);
-if (isNaN(panStepMs) || panStepMs < 15 || panStepMs > 250) panStepMs = 40;
+// 360° Ultra-Fine Micro-Step ("Little-by-Little") & Active Electronic Brake State
+let precisionMode = localStorage.getItem("rov_precision_mode") !== "0";
+let panStepMs = parseInt(localStorage.getItem("rov_pan_step_ms") || "18", 10);
+if (isNaN(panStepMs) || panStepMs < 8 || panStepMs > 250) panStepMs = 18;
+let panBrake = localStorage.getItem("rov_pan_brake") !== "0";
+let tiltStepDeg = parseFloat(localStorage.getItem("rov_tilt_step_deg") || "1");
+if (isNaN(tiltStepDeg) || tiltStepDeg < 0.5 || tiltStepDeg > 15) tiltStepDeg = 1;
 let panHoldInterval = null;
+let tiltHoldInterval = null;
 let panStopBackupTimer = null;
 let panSwipeCooldown = false;
 
@@ -1232,21 +1248,94 @@ function toggleInvertTilt() {
   setTimeout(hideIndicator, 700);
 }
 
-// ── 360° Micro-Step ("Little-by-Little") Calibration ────────────────────────
-function onPanStepSizeChange(ms) {
-  panStepMs = Math.max(15, Math.min(200, parseInt(ms, 10) || 40));
-  localStorage.setItem("rov_pan_step_ms", String(panStepMs));
-  const estDeg = Math.max(3, Math.round(panStepMs * 0.25));
+// ── 360° Ultra-Fine Micro-Step & Active Electronic Brake Calibration ────────
+function syncPrecisionUI() {
+  const estDeg = Math.max(1.5, +(panStepMs * (panBrake ? 0.14 : 0.22)).toFixed(1));
+  const brakeTag = panBrake ? " + Brake" : "";
   const lbl = document.getElementById("drawer-step-val");
-  if (lbl) lbl.innerText = `${panStepMs} ms (~${estDeg}°)`;
+  if (lbl) lbl.innerText = `${panStepMs} ms (~${estDeg}°)${brakeTag}`;
   const sl = document.getElementById("drawer-step-slider");
   if (sl) sl.value = panStepMs;
   const hudMs = document.getElementById("lbl-step-ms");
-  if (hudMs) hudMs.innerText = `${panStepMs}ms`;
+  if (hudMs) hudMs.innerText = `${panStepMs}ms${panBrake ? '🛑' : ''}`;
+
+  const brakeBtn = document.getElementById("btn-pan-brake");
+  if (brakeBtn) {
+    brakeBtn.innerText = panBrake ? "🛑 Brake: ON" : "🛑 Brake: OFF";
+    brakeBtn.style.borderColor = panBrake ? "var(--accent)" : "";
+    brakeBtn.style.color = panBrake ? "var(--accent)" : "";
+  }
+
+  const hudTiltStep = document.getElementById("lbl-tilt-step");
+  if (hudTiltStep) hudTiltStep.innerText = `${tiltStepDeg}°`;
+  const drTiltStep = document.getElementById("drawer-tilt-step-lbl");
+  if (drTiltStep) drTiltStep.innerText = `${tiltStepDeg}°`;
+
+  [1, 2, 5].forEach(s => {
+    const b = document.getElementById(`tstep-${s}`);
+    if (b) {
+      b.style.color = (tiltStepDeg === s) ? "var(--accent)" : "";
+      b.style.fontWeight = (tiltStepDeg === s) ? "bold" : "";
+    }
+  });
+
+  const isFine = (panStepMs <= 22 && tiltStepDeg <= 1.5);
+  precisionMode = isFine;
+  const topBtn = document.getElementById("btn-fine-mode");
+  const topLbl = document.getElementById("btn-fine-lbl");
+  const botBtn = document.getElementById("btn-fine-bottom");
+  const botLbl = document.getElementById("lbl-fine-btn");
+  if (topBtn) topBtn.classList.toggle("active", isFine);
+  if (topLbl) topLbl.innerText = isFine ? `Fine ${tiltStepDeg}°` : `Norm ${tiltStepDeg}°`;
+  if (botBtn) botBtn.classList.toggle("active", isFine);
+  if (botLbl) botLbl.innerText = isFine ? `Fine ${tiltStepDeg}°` : `Norm ${tiltStepDeg}°`;
 }
 
-// Initialize saved step size & orientation on load
-onPanStepSizeChange(panStepMs);
+function onPanStepSizeChange(ms) {
+  panStepMs = Math.max(8, Math.min(200, parseInt(ms, 10) || 18));
+  localStorage.setItem("rov_pan_step_ms", String(panStepMs));
+  syncPrecisionUI();
+}
+
+function togglePanBrake() {
+  panBrake = !panBrake;
+  localStorage.setItem("rov_pan_brake", panBrake ? "1" : "0");
+  syncPrecisionUI();
+  showIndicator(panBrake ? "🛑 ACTIVE ELECTRONIC BRAKE: ON" : "🛑 ELECTRONIC BRAKE: OFF");
+  setTimeout(hideIndicator, 850);
+}
+
+function setTiltStepSize(deg) {
+  tiltStepDeg = Math.max(0.5, Math.min(15, parseFloat(deg) || 1));
+  localStorage.setItem("rov_tilt_step_deg", String(tiltStepDeg));
+  syncPrecisionUI();
+  showIndicator(`📐 TILT STEP: ${tiltStepDeg}° PER TAP`);
+  setTimeout(hideIndicator, 800);
+}
+
+function togglePrecisionMode() {
+  if (precisionMode) {
+    // Switch to Normal Speed Mode (35ms pan pulse, 3° tilt step)
+    precisionMode = false;
+    localStorage.setItem("rov_precision_mode", "0");
+    onPanStepSizeChange(36);
+    setTiltStepSize(3);
+    showIndicator("⚡ NORMAL SPEED: 3° Tilt | 36ms Pan");
+  } else {
+    // Switch to Ultra-Fine Precision Mode (18ms braked pan micro-tick, 1° single-degree tilt)
+    precisionMode = true;
+    localStorage.setItem("rov_precision_mode", "1");
+    panBrake = true;
+    localStorage.setItem("rov_pan_brake", "1");
+    onPanStepSizeChange(18);
+    setTiltStepSize(1);
+    showIndicator("🔬 ULTRA-FINE: 1° Tilt | 18ms Braked Pan");
+  }
+  setTimeout(hideIndicator, 1000);
+}
+
+// Initialize saved step size, precision mode & orientation on load
+syncPrecisionUI();
 syncOrientationUI();
 
 // ── Touch Screen Little-by-Little Step & Two-Finger Pinch-to-Zoom ───────────
@@ -1276,24 +1365,24 @@ function handleSwipeMove(curX, curY) {
   const dy = curY - touchStartY;
 
   if (Math.abs(dx) > Math.abs(dy)) {
-    // Little-by-Little 360° Micro-Stepping: every 26px of finger drag triggers ONE tiny pulse step!
-    if (Math.abs(dx) >= 26 && !panSwipeCooldown) {
+    // Little-by-Little 360° Micro-Stepping: every 22px of finger drag triggers ONE tiny braked micro-pulse!
+    if (Math.abs(dx) >= 22 && !panSwipeCooldown) {
       panSwipeCooldown = true;
-      setTimeout(() => { panSwipeCooldown = false; }, Math.max(140, panStepMs + 90));
+      setTimeout(() => { panSwipeCooldown = false; }, Math.max(120, panStepMs + 85));
       touchStartX = curX;
       touchStartY = curY;
       const dir = dx < 0 ? 'left' : 'right';
       triggerPanTimed(dir);
     }
   } else {
-    if (Math.abs(dy) >= 22 && !tiltThrottleTimer) {
-      tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 110);
+    if (Math.abs(dy) >= 16 && !tiltThrottleTimer) {
+      tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 85);
       touchStartY = curY;
       touchStartX = curX;
       const wantUp = dy < 0;
-      const delta = (wantUp !== invertTilt) ? 5 : -5;
-      const nextTilt = Math.max(0, Math.min(180, lastTiltSent + delta));
-      showIndicator(`${wantUp ? '▲ TILT UP' : '▼ TILT DOWN'} (${nextTilt}°)`);
+      const delta = (wantUp !== invertTilt) ? tiltStepDeg : -tiltStepDeg;
+      const nextTilt = Math.max(0, Math.min(180, +(lastTiltSent + delta).toFixed(1)));
+      showIndicator(`${wantUp ? '▲ TILT UP' : '▼ TILT DOWN'} (${nextTilt}° | Δ${tiltStepDeg}°)`);
       updateLabels(undefined, nextTilt);
       postTilt({angle: nextTilt});
     }
@@ -1347,7 +1436,7 @@ window.addEventListener('mousemove', e => {
 });
 window.addEventListener('mouseup', handleSwipeEnd);
 
-// ── Servo API Calls (Micro-Stepping for 360° Modified SG90 Servo) ───────────
+// ── Servo API Calls (Ultra-Fine Micro-Stepping + Electronic Brake) ──────────
 function postPan(data) {
   fetch(getApiUrl('/api/pan'), {
     method: 'POST',
@@ -1370,61 +1459,95 @@ function postTilt(data) {
 
 function updateLabels(p, t) {
   if (p !== undefined) {
-    let tag = (p >= 84 && p <= 96) ? 'STOPPED' : (p < 84 ? '◀ STEP L' : 'STEP R ▶');
+    let tag = (p >= 84 && p <= 96) ? 'STOPPED' : (p < 84 ? '◀ MICRO L' : 'MICRO R ▶');
     document.getElementById('lbl-pan').innerText = tag;
     document.getElementById('drawer-pan-val').innerText = tag;
     lastPanSent = p;
   }
   if (t !== undefined) {
-    let tag = t == 90 ? ' (Level)' : (t < 90 ? ' (Down)' : ' (Up)');
-    document.getElementById('lbl-tilt').innerText = `${t}°`;
-    document.getElementById('drawer-tilt-val').innerText = `${t}°${tag}`;
-    document.getElementById('drawer-tilt-slider').value = t;
-    lastTiltSent = t;
+    const cleanT = +parseFloat(t).toFixed(1);
+    let tag = cleanT == 90 ? ' (Level)' : (cleanT < 90 ? ' (Down)' : ' (Up)');
+    document.getElementById('lbl-tilt').innerText = `${cleanT}°`;
+    document.getElementById('drawer-tilt-val').innerText = `${cleanT}°${tag}`;
+    document.getElementById('drawer-tilt-slider').value = cleanT;
+    lastTiltSent = cleanT;
   }
 }
 
 function sendTiltAction(act) {
-  let effectiveAct = act;
-  if (invertTilt) {
-    if (act === 'up') effectiveAct = 'down';
-    else if (act === 'down') effectiveAct = 'up';
+  const wantUp = (act === 'up');
+  const delta = (wantUp !== invertTilt) ? tiltStepDeg : -tiltStepDeg;
+  const nextTilt = Math.max(0, Math.min(180, +(lastTiltSent + delta).toFixed(1)));
+  showIndicator(`${wantUp ? '▲ TILT UP' : '▼ TILT DOWN'} ${nextTilt}° (${delta > 0 ? '+' : ''}${delta}°)`);
+  updateLabels(undefined, nextTilt);
+  postTilt({angle: nextTilt});
+  setTimeout(hideIndicator, 350);
+}
+
+function startTiltHold(act, ev) {
+  if (ev) ev.preventDefault();
+  stopTiltHold();
+  sendTiltAction(act);
+  tiltHoldInterval = setInterval(() => {
+    sendTiltAction(act);
+  }, 150);
+}
+
+function stopTiltHold() {
+  if (tiltHoldInterval) {
+    clearInterval(tiltHoldInterval);
+    tiltHoldInterval = null;
   }
-  postTilt({action: effectiveAct});
 }
 
 let panStepInFlight = false;
 
-async function triggerPanTimed(dir) {
+async function triggerPanTimed(dir, customMs) {
   if (panStepInFlight) return;
   panStepInFlight = true;
 
+  const stepMs = customMs || panStepMs;
   const effectiveDir = invertPan ? (dir === 'left' ? 'right' : 'left') : dir;
-  // Use extreme 0° (600µs) for Left and 180° (2400µs) for Right so any internal
-  // potentiometer position between 1° and 179° in the modified 360° SG90 reverses cleanly!
+  // Use 0° (600µs) for Left and 180° (2400µs) for Right so any internal
+  // potentiometer position in the modified 360° SG90 reverses reliably.
   const targetAngle = (effectiveDir === 'left') ? 0 : 180;
-  const durSec = +(panStepMs / 1000).toFixed(3);
-  const estDeg = Math.max(3, Math.round(panStepMs * 0.25));
+  const oppositeAngle = (targetAngle === 0) ? 180 : 0;
+  const durSec = +(stepMs / 1000).toFixed(3);
+  const estDeg = Math.max(1.5, +(stepMs * (panBrake ? 0.14 : 0.22)).toFixed(1));
 
-  showIndicator(dir === 'left' ? `◀ STEP LEFT (~${estDeg}°)` : `STEP RIGHT (~${estDeg}°) ▶`);
+  showIndicator(dir === 'left' ? `◀ MICRO LEFT (~${estDeg}°)` : `MICRO RIGHT (~${estDeg}°) ▶`);
   updateLabels(targetAngle, undefined);
 
-  try {
-    await fetch(getApiUrl('/api/pan'), {
+  // Zero-RTT Pipelined Start: start the stepMs timer immediately when the packet is sent
+  // so Wi-Fi round-trip time does NOT lengthen the motor pulse!
+  const startPromise = fetch(getApiUrl('/api/pan'), {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({angle: targetAngle, duration: durSec, brake: panBrake})
+  }).catch(() => {});
+
+  await new Promise(r => setTimeout(r, stepMs));
+
+  // Active Electronic Brake: send a brief 10ms counter-pulse before cutting PWM (angle: 90)
+  // to cancel the SG90 rotor inertia and prevent gear coasting!
+  if (panBrake) {
+    fetch(getApiUrl('/api/pan'), {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({angle: targetAngle, duration: durSec})
-    });
-  } catch (e) {}
-
-  await new Promise(r => setTimeout(r, panStepMs));
+      body: JSON.stringify({angle: oppositeAngle, duration: 0.010})
+    }).catch(() => {});
+    await new Promise(r => setTimeout(r, 10));
+  }
 
   try {
-    await fetch(getApiUrl('/api/pan'), {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({angle: 90})
-    });
+    await Promise.all([
+      startPromise,
+      fetch(getApiUrl('/api/pan'), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({angle: 90})
+      })
+    ]);
   } catch (e) {}
 
   updateLabels(90, undefined);
@@ -1436,7 +1559,7 @@ function startPanHold(dir, ev) {
   if (ev) ev.preventDefault();
   stopPanHold();
   triggerPanTimed(dir);
-  const repeatInterval = Math.max(220, panStepMs + 170);
+  const repeatInterval = Math.max(180, panStepMs + 145);
   panHoldInterval = setInterval(() => {
     triggerPanTimed(dir);
   }, repeatInterval);
@@ -1458,8 +1581,9 @@ function triggerPanStop() {
 }
 
 function setTiltDirect(val) {
-  updateLabels(undefined, parseInt(val));
-  postTilt({angle: parseInt(val)});
+  const v = +parseFloat(val).toFixed(1);
+  updateLabels(undefined, v);
+  postTilt({angle: v});
 }
 
 function onPanSliderInput(val) {
@@ -1473,7 +1597,7 @@ function onPanSliderInput(val) {
   const dir = p < 90 ? 'left' : 'right';
   if (!panTimer) {
     triggerPanTimed(dir);
-    panTimer = setTimeout(() => { panTimer = null; }, Math.max(190, panStepMs + 150));
+    panTimer = setTimeout(() => { panTimer = null; }, Math.max(170, panStepMs + 135));
   }
 }
 
@@ -1491,14 +1615,15 @@ panSlider.addEventListener('pointerup', releasePanToStop);
 panSlider.addEventListener('touchcancel', releasePanToStop);
 
 function onTiltSliderInput(val) {
-  const t = parseInt(val);
+  const t = +parseFloat(val).toFixed(1);
   updateLabels(undefined, t);
   if (tiltTimer) clearTimeout(tiltTimer);
-  tiltTimer = setTimeout(() => { postTilt({angle: t}); }, 40);
+  tiltTimer = setTimeout(() => { postTilt({angle: t}); }, 35);
 }
 
 function recenterAll() {
   stopPanHold();
+  stopTiltHold();
   updateLabels(90, 90);
   postPan({angle: 90});
   postTilt({angle: 90});
