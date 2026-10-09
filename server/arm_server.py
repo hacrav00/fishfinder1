@@ -158,15 +158,15 @@ def set_pan(deg_or_action, duration=None):
         if isinstance(deg_or_action, str):
             act = deg_or_action.lower()
             if act == "left":
-                current_pan = 40
-                pw = 1200
+                current_pan = 75
+                pw = 1360  # Gentle pulse near center for modified SG90 360° servo
                 if duration is None:
-                    duration = 0.5
+                    duration = 0.040
             elif act == "right":
-                current_pan = 140
-                pw = 1800
+                current_pan = 105
+                pw = 1640  # Gentle pulse near center for modified SG90 360° servo
                 if duration is None:
-                    duration = 0.5
+                    duration = 0.040
             else:
                 current_pan = 90
                 stop_pwm(PAN_PIN)
@@ -178,16 +178,18 @@ def set_pan(deg_or_action, duration=None):
                 current_pan = 90
                 stop_pwm(PAN_PIN)
                 return
-            pw = deg_to_pw_pan(deg)
+            pw = 1360 if deg < 90 else 1640
+            if duration is None:
+                duration = 0.040
 
+        duration = max(0.015, min(0.250, float(duration)))
         lgpio.tx_servo(h, PAN_PIN, pw, 50)
 
-        if duration and duration > 0:
-            def _auto_stop():
-                set_pan(90)
-            pan_timer = threading.Timer(duration, _auto_stop)
-            pan_timer.daemon = True
-            pan_timer.start()
+        def _auto_stop():
+            set_pan(90)
+        pan_timer = threading.Timer(duration, _auto_stop)
+        pan_timer.daemon = True
+        pan_timer.start()
 
 
 def apply_camera_focus(action="trigger", mode=None, value=None):
@@ -300,7 +302,7 @@ HTML_PAGE = """<!DOCTYPE html>
       <button class="btn btn-accent" onclick="triggerAutofocus()">🎯 Autofocus</button>
       <button class="btn" onclick="stepZoom(-0.5)">🔍- Zoom Out</button>
       <button class="btn" onclick="stepZoom(0.5)">🔍+ Zoom In</button>
-      <button class="btn" onclick="setZoomLevel(1.0)">1.0x Reset</button>
+      <button class="btn" onclick="cycleCamRotate()">🙃 Rotate/Hang</button>
     </div>
     <div class="slider-row">
       <div class="slider-lbl">
@@ -310,14 +312,14 @@ HTML_PAGE = """<!DOCTYPE html>
       <input type="range" id="zoom-slider" min="10" max="40" value="10" oninput="setZoomLevel(this.value/10)">
     </div>
 
-    <div class="section-title">Pan & Tilt Servo Controls</div>
+    <div class="section-title">Pan (360° Little-by-Little) & Tilt Controls</div>
     <div class="dpad">
       <div></div>
       <button class="btn" onclick="sendTiltAction('up')">▲ Up</button>
       <div></div>
-      <button class="btn" onclick="triggerPanTimed('left')">◀ Left</button>
+      <button class="btn" onclick="triggerPanTimed('left')">◀ Step L</button>
       <button class="btn btn-accent" onclick="recenter()">⨁ Center</button>
-      <button class="btn" onclick="triggerPanTimed('right')">Right ▶</button>
+      <button class="btn" onclick="triggerPanTimed('right')">Step R ▶</button>
       <div></div>
       <button class="btn" onclick="sendTiltAction('down')">▼ Down</button>
       <div></div>
@@ -325,14 +327,14 @@ HTML_PAGE = """<!DOCTYPE html>
 
     <div class="slider-row">
       <div class="slider-lbl">
-        <span>Pan (360° Joystick Slider)</span>
+        <span>Pan (360° Micro-Step Slider)</span>
         <span id="pan-val" class="slider-val">STOPPED</span>
       </div>
       <input type="range" id="pan-slider" min="0" max="180" value="90" oninput="onPanInput(this.value)">
       <div class="hint-row">
-        <span onclick="triggerPanTimed('left')">◀ Nudge Left</span>
+        <span onclick="triggerPanTimed('left')">◀ Step Left (~10°)</span>
         <span onclick="triggerPanStop()" style="color:#00d4aa; font-weight:bold;">⏹ STOP</span>
-        <span onclick="triggerPanTimed('right')">Nudge Right ▶</span>
+        <span onclick="triggerPanTimed('right')">Step Right (~10°) ▶</span>
       </div>
     </div>
 
@@ -355,8 +357,22 @@ const feed = document.getElementById("stream-img");
 feed.src = "http://" + window.location.hostname + ":8000/stream";
 feed.onerror = function() { feed.src = "/stream?t=" + Date.now(); };
 
-let lastPanSent = 90, lastTiltSent = 90, currentZoom = 1.0;
-let panTimer = null, tiltTimer = null;
+let lastPanSent = 90, lastTiltSent = 90, currentZoom = 1.0, camRot = parseInt(localStorage.getItem('rov_cam_rot') || '0', 10);
+let panTimer = null, tiltTimer = null, swipePanCooldown = false;
+
+function applyFeedTransform() {
+  feed.style.transform = `rotate(${camRot}deg) scale(${currentZoom})`;
+}
+applyFeedTransform();
+
+function cycleCamRotate() {
+  const order = [0, 180, 90, 270];
+  camRot = order[(order.indexOf(camRot) + 1) % order.length];
+  localStorage.setItem('rov_cam_rot', String(camRot));
+  applyFeedTransform();
+  showIndicator(camRot === 180 ? '🙃 HANGING 180°' : `🔄 ROTATE ${camRot}°`);
+  setTimeout(hideIndicator, 700);
+}
 
 function post(url, data) {
   return fetch(url, {
@@ -383,10 +399,10 @@ function triggerAutofocus() {
 
 function setZoomLevel(z) {
   currentZoom = Math.max(1.0, Math.min(4.0, parseFloat(z)));
-  feed.style.transform = `scale(${currentZoom})`;
+  applyFeedTransform();
   document.getElementById("zoom-val").innerText = currentZoom.toFixed(1) + "x";
   document.getElementById("zoom-slider").value = Math.round(currentZoom * 10);
-  document.getElementById("zoom-info").innerText = `Zoom: ${currentZoom.toFixed(1)}x | AF: Ready`;
+  document.getElementById("zoom-info").innerText = `Zoom: ${currentZoom.toFixed(1)}x | View: ${camRot}°`;
   post('/api/zoom', {zoom: currentZoom});
 }
 
@@ -396,9 +412,8 @@ function stepZoom(delta) {
 
 function updateLabels(p, t) {
   if (p !== undefined) {
-    let tag = (p >= 85 && p <= 95) ? 'STOPPED' : (p < 85 ? '◀ SPINNING L' : 'SPINNING R ▶');
+    let tag = (p >= 84 && p <= 96) ? 'STOPPED' : (p < 84 ? '◀ STEP L' : 'STEP R ▶');
     document.getElementById('pan-val').innerText = tag;
-    document.getElementById('pan-slider').value = p;
     lastPanSent = p;
   }
   if (t !== undefined) {
@@ -409,22 +424,28 @@ function updateLabels(p, t) {
   }
   const curP = p !== undefined ? p : lastPanSent;
   const curT = t !== undefined ? t : lastTiltSent;
-  const pText = (curP >= 85 && curP <= 95) ? 'STOPPED' : (curP < 85 ? 'SPIN L' : 'SPIN R');
+  const pText = (curP >= 84 && curP <= 96) ? 'STOPPED' : (curP < 84 ? 'STEP L' : 'STEP R');
   document.getElementById('pos-info').innerText = 'Pan: ' + pText + ' | Tilt: ' + curT + '°';
 }
 
 function sendTiltAction(act) { post('/api/tilt', {action: act}); }
 function triggerPanTimed(dir) {
-  post('/api/pan', {action: dir, duration: 0.5});
-  setTimeout(() => { updateLabels(90, undefined); }, 550);
+  showIndicator(dir === 'left' ? '◀ STEP LEFT (~10°)' : 'STEP RIGHT (~10°) ▶');
+  post('/api/pan', {action: dir, duration: 0.040});
+  setTimeout(() => { post('/api/pan', {angle: 90}); updateLabels(90, undefined); hideIndicator(); }, 95);
 }
 function triggerPanStop() { updateLabels(90, undefined); post('/api/pan', {angle: 90}); }
 function setTiltDirect(val) { updateLabels(undefined, parseInt(val)); post('/api/tilt', {angle: parseInt(val)}); }
 function onPanInput(val) {
   const p = parseInt(val);
-  updateLabels(p, undefined);
-  if (panTimer) clearTimeout(panTimer);
-  panTimer = setTimeout(() => { post('/api/pan', {angle: p}); }, 35);
+  if (p >= 82 && p <= 98) {
+    triggerPanStop();
+    return;
+  }
+  if (!panTimer) {
+    triggerPanTimed(p < 90 ? 'left' : 'right');
+    panTimer = setTimeout(() => { panTimer = null; }, 190);
+  }
 }
 const panSlider = document.getElementById('pan-slider');
 function releasePanToStop() {
@@ -454,7 +475,7 @@ function recenter() {
 const touchArea = document.getElementById("video-touch-area");
 const indicator = document.getElementById("gesture-indicator");
 const indicatorText = document.getElementById("gesture-text");
-let touchStartX = 0, touchStartY = 0, isTouching = false, currentSwipeAction = null, tiltThrottleTimer = null;
+let touchStartX = 0, touchStartY = 0, isTouching = false, tiltThrottleTimer = null;
 
 function showIndicator(txt) { indicatorText.innerText = txt; indicator.style.display = "block"; }
 function hideIndicator() { indicator.style.display = "none"; }
@@ -462,33 +483,33 @@ function hideIndicator() { indicator.style.display = "none"; }
 function handleSwipeMove(curX, curY) {
   const dx = curX - touchStartX, dy = curY - touchStartY;
   if (Math.abs(dx) > Math.abs(dy)) {
-    if (dx < -25 && currentSwipeAction !== 'left') {
-      currentSwipeAction = 'left'; showIndicator('◀ PAN LEFT'); post('/api/pan', {action: 'left'}); updateLabels(40, undefined);
-    } else if (dx > 25 && currentSwipeAction !== 'right') {
-      currentSwipeAction = 'right'; showIndicator('PAN RIGHT ▶'); post('/api/pan', {action: 'right'}); updateLabels(140, undefined);
+    if (Math.abs(dx) >= 26 && !swipePanCooldown) {
+      swipePanCooldown = true;
+      setTimeout(() => { swipePanCooldown = false; }, 170);
+      touchStartX = curX;
+      touchStartY = curY;
+      triggerPanTimed(dx < 0 ? 'left' : 'right');
     }
   } else {
-    if (dy < -20 && !tiltThrottleTimer) {
+    if (Math.abs(dy) >= 22 && !tiltThrottleTimer) {
       tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 110);
-      const nextTilt = Math.min(180, lastTiltSent + 5);
-      showIndicator('▲ TILT UP (' + nextTilt + '°)'); updateLabels(undefined, nextTilt); post('/api/tilt', {angle: nextTilt});
-    } else if (dy > 20 && !tiltThrottleTimer) {
-      tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 110);
-      const nextTilt = Math.max(0, lastTiltSent - 5);
-      showIndicator('▼ TILT DOWN (' + nextTilt + '°)'); updateLabels(undefined, nextTilt); post('/api/tilt', {angle: nextTilt});
+      touchStartY = curY;
+      touchStartX = curX;
+      const nextTilt = dy < 0 ? Math.min(180, lastTiltSent + 5) : Math.max(0, lastTiltSent - 5);
+      showIndicator((dy < 0 ? '▲ TILT UP (' : '▼ TILT DOWN (') + nextTilt + '°)');
+      updateLabels(undefined, nextTilt);
+      post('/api/tilt', {angle: nextTilt});
     }
   }
 }
 function handleSwipeEnd() {
   if (isTouching) {
-    isTouching = false; hideIndicator();
-    if (currentSwipeAction === 'left' || currentSwipeAction === 'right') {
-      currentSwipeAction = null; post('/api/pan', {action: 'stop'}); updateLabels(90, undefined);
-    }
+    isTouching = false;
+    setTimeout(hideIndicator, 200);
   }
 }
 touchArea.addEventListener('touchstart', e => {
-  if (e.touches.length === 1) { touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY; isTouching = true; currentSwipeAction = null; }
+  if (e.touches.length === 1) { touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY; isTouching = true; }
 }, {passive: false});
 touchArea.addEventListener('touchmove', e => {
   if (!isTouching || e.touches.length !== 1) return;
@@ -496,7 +517,7 @@ touchArea.addEventListener('touchmove', e => {
 }, {passive: false});
 touchArea.addEventListener('touchend', handleSwipeEnd);
 touchArea.addEventListener('touchcancel', handleSwipeEnd);
-touchArea.addEventListener('mousedown', e => { touchStartX = e.clientX; touchStartY = e.clientY; isTouching = true; currentSwipeAction = null; });
+touchArea.addEventListener('mousedown', e => { touchStartX = e.clientX; touchStartY = e.clientY; isTouching = true; });
 window.addEventListener('mousemove', e => { if (isTouching) handleSwipeMove(e.clientX, e.clientY); });
 window.addEventListener('mouseup', handleSwipeEnd);
 </script>
