@@ -571,7 +571,7 @@
     <div id="hud-indicator">SWIPE</div>
     <div id="rec-indicator">● REC <span id="rec-timer">00:00</span></div>
 
-    <!-- Dedicated Left Floating Autofocus & Zoom Controls -->
+    <!-- Dedicated Left Floating Autofocus, Zoom & Container Hanging Flip Controls -->
     <div id="zoom-focus-bar">
       <button class="zf-btn af-btn" onclick="triggerAutofocus()">
         <span>🎯</span>
@@ -580,14 +580,18 @@
       <button class="zf-btn" onclick="stepZoom(0.5)">🔍+</button>
       <div class="zf-pill" id="hud-zoom-pill" onclick="setZoom(1.0)">1.0x</div>
       <button class="zf-btn" onclick="stepZoom(-0.5)">🔍-</button>
+      <button class="zf-btn" id="hud-rot-btn" onclick="cycleCameraRotation()" title="Rotate / Hanging Flip">
+        <span>🔄</span>
+        <span id="hud-rot-lbl" style="font-size:8px;">0°</span>
+      </button>
     </div>
 
     <!-- Position HUD -->
     <div id="hud-info">
-      Pan: <b id="lbl-pan">STOPPED</b> &nbsp;|&nbsp; Tilt: <b id="lbl-tilt">90°</b> &nbsp;|&nbsp; Zoom: <b id="lbl-zoom">1.0x</b>
+      Pan: <b id="lbl-pan">STOPPED</b> (<span id="lbl-step-ms">40ms</span>) &nbsp;|&nbsp; Tilt: <b id="lbl-tilt">90°</b> &nbsp;|&nbsp; Zoom: <b id="lbl-zoom">1.0x</b>
     </div>
     <div id="hud-hint">
-      👆 Swipe to Pan/Tilt | Pinch to Zoom
+      👆 Drag Little-by-Little to Step 360° | Pinch to Zoom
     </div>
   </div>
 
@@ -607,6 +611,10 @@
         <span class="icon">🔍-</span>
         <span>Zoom Out</span>
       </button>
+      <button class="btn-action" id="btn-hang-flip" onclick="toggleHangingMode()">
+        <span class="icon">🙃</span>
+        <span id="lbl-hang-btn">Hang 180°</span>
+      </button>
       <button class="btn-action" id="btn-snap" onclick="takeSnapshot()">
         <span class="icon">📸</span>
         <span>Photo</span>
@@ -625,14 +633,14 @@
       </button>
     </div>
 
-    <!-- Quick D-Pad -->
+    <!-- Quick D-Pad (Tap for single micro-step, Hold for slow step-by-step ticks) -->
     <div class="dpad-container">
       <div></div>
       <div class="dpad-btn" onclick="sendTiltAction('up')">▲</div>
       <div></div>
-      <div class="dpad-btn" onclick="triggerPanTimed('left')">◀</div>
+      <div class="dpad-btn" id="dpad-left" onpointerdown="startPanHold('left', event)" onpointerup="stopPanHold()" onpointerleave="stopPanHold()" onpointercancel="stopPanHold()">◀</div>
       <div class="dpad-btn dpad-center" onclick="recenterAll()">⨁</div>
-      <div class="dpad-btn" onclick="triggerPanTimed('right')">▶</div>
+      <div class="dpad-btn" id="dpad-right" onpointerdown="startPanHold('right', event)" onpointerup="stopPanHold()" onpointerleave="stopPanHold()" onpointercancel="stopPanHold()">▶</div>
       <div></div>
       <div class="dpad-btn" onclick="sendTiltAction('down')">▼</div>
       <div></div>
@@ -642,10 +650,45 @@
   <!-- Settings & Sliders Slide-up Drawer -->
   <div id="settings-drawer">
     <div class="drawer-header">
-      <div class="drawer-title">🎛️ ROV Camera, Focus, Zoom & Servo Sliders</div>
+      <div class="drawer-title">🎛️ ROV Camera, Hanging Mount & 360° Micro-Step Controls</div>
       <button class="btn-close" onclick="toggleSettingsDrawer()">✕</button>
     </div>
     <div class="drawer-grid">
+      <!-- 360° Pan Micro-Step ("Little by Little") Calibration Card -->
+      <div class="slider-card">
+        <div class="slider-header">
+          <span>360° Pan Step Size (Little-by-Little)</span>
+          <span id="drawer-step-val" class="slider-val">40 ms (~10°)</span>
+        </div>
+        <input type="range" id="drawer-step-slider" min="15" max="150" step="5" value="40" oninput="onPanStepSizeChange(this.value)">
+        <div class="preset-row">
+          <span class="preset-btn" onclick="onPanStepSizeChange(25)">Fine 25ms (~5°)</span>
+          <span class="preset-btn" onclick="onPanStepSizeChange(40)" style="color:var(--accent); font-weight:bold;">Default 40ms (~10°)</span>
+          <span class="preset-btn" onclick="onPanStepSizeChange(65)">Small 65ms (~20°)</span>
+          <span class="preset-btn" onclick="onPanStepSizeChange(100)">Med 100ms (~35°)</span>
+        </div>
+      </div>
+
+      <!-- Container Hanging Mount & Camera Display Orientation Card -->
+      <div class="slider-card">
+        <div class="slider-header">
+          <span>Container Hanging & Display Rotation</span>
+          <span id="drawer-rot-val" class="slider-val">0° Normal</span>
+        </div>
+        <div class="preset-row" style="margin-top:4px;">
+          <span class="preset-btn" onclick="setCameraRotation(0)">0° Upright</span>
+          <span class="preset-btn" onclick="toggleHangingMode()" style="color:var(--accent); font-weight:bold;">🙃 180° Hanging</span>
+          <span class="preset-btn" onclick="setCameraRotation(90)">90° CW</span>
+          <span class="preset-btn" onclick="setCameraRotation(270)">270° CCW</span>
+        </div>
+        <div class="preset-row" style="margin-top:4px;">
+          <span class="preset-btn" id="btn-flip-v" onclick="toggleFlipV()">↕ Flip V</span>
+          <span class="preset-btn" id="btn-flip-h" onclick="toggleFlipH()">↔ Mirror H</span>
+          <span class="preset-btn" id="btn-inv-pan" onclick="toggleInvertPan()">⇄ Invert Pan L/R</span>
+          <span class="preset-btn" id="btn-inv-tilt" onclick="toggleInvertTilt()">⇅ Invert Tilt U/D</span>
+        </div>
+      </div>
+
       <!-- Autofocus & Manual Focus Slider -->
       <div class="slider-card">
         <div class="slider-header">
@@ -677,17 +720,17 @@
         </div>
       </div>
 
-      <!-- Pan Continuous Joystick Slider -->
+      <!-- Pan Continuous Micro-Step Slider -->
       <div class="slider-card">
         <div class="slider-header">
-          <span>Pan (360° Continuous Servo)</span>
+          <span>Pan (360° Micro-Step Control)</span>
           <span id="drawer-pan-val" class="slider-val">STOPPED</span>
         </div>
         <input type="range" id="drawer-pan-slider" min="0" max="180" value="90" oninput="onPanSliderInput(this.value)">
         <div class="preset-row">
-          <span class="preset-btn" onclick="triggerPanTimed('left')">◀ Left (0.5s)</span>
+          <span class="preset-btn" onclick="triggerPanTimed('left')">◀ Step Left</span>
           <span class="preset-btn" onclick="triggerPanStop()" style="color:var(--accent); font-weight:bold;">⏹ STOP</span>
-          <span class="preset-btn" onclick="triggerPanTimed('right')">Right (0.5s) ▶</span>
+          <span class="preset-btn" onclick="triggerPanTimed('right')">Step Right ▶</span>
         </div>
       </div>
 
@@ -771,6 +814,20 @@ let recordedChunks = [];
 let recTimerInterval = null;
 let recSeconds = 0;
 
+// 360° Micro-Step ("Little-by-Little") State (default 40ms pulse per step)
+let panStepMs = parseInt(localStorage.getItem("rov_pan_step_ms") || "40", 10);
+if (isNaN(panStepMs) || panStepMs < 15 || panStepMs > 250) panStepMs = 40;
+let panHoldInterval = null;
+let panStopBackupTimer = null;
+let panSwipeCooldown = false;
+
+// Container Hanging & Camera Display Orientation State
+let camRotate = parseInt(localStorage.getItem("rov_cam_rot") || "0", 10);
+let flipH = localStorage.getItem("rov_flip_h") === "1";
+let flipV = localStorage.getItem("rov_flip_v") === "1";
+let invertPan = localStorage.getItem("rov_inv_pan") === "1";
+let invertTilt = localStorage.getItem("rov_inv_tilt") === "1";
+
 let panTimer = null;
 let tiltTimer = null;
 let fpsCount = 0;
@@ -812,7 +869,6 @@ function setActiveHostIp(newIp) {
 }
 
 // ── Universal Router Auto-Discovery Engine ──────────────────────────────────
-// Probes known router IPs first, then scans the COFE 192.168.150.x and active subnets!
 function probeSingleHost(ip, timeoutMs = 950) {
   return new Promise((resolve) => {
     let settled = false;
@@ -830,7 +886,6 @@ function probeSingleHost(ip, timeoutMs = 950) {
         }
       })
       .catch(() => {
-        // Fallback probe via image ping on stream port 8000
         const img = new Image();
         img.onload = () => {
           if (!settled) { settled = true; clearTimeout(timer); img.src = ""; resolve(ip); }
@@ -848,7 +903,6 @@ async function scanSubnetPrefix(prefix) {
   if (prog) prog.innerText = `Scanning router ${prefix}.1 - ${prefix}.254...`;
   updateConnectionUI("connecting", `SCAN ${prefix}.x`);
 
-  // Priority candidates on this subnet (.131, .100-.120, .2-.50)
   const priority = [131, 100, 101, 102, 103, 104, 105, 2, 3, 4, 5, 10, 20, 42, 50, 110, 150, 200];
   const all = [...new Set([...priority, ...Array.from({length: 253}, (_, i) => i + 2)])];
 
@@ -879,7 +933,6 @@ async function autoDiscoverRov(manualTrigger = false) {
   if (manualTrigger) showIndicator("🔍 SCANNING ROUTER...");
   updateConnectionUI("connecting", "SCANNING");
 
-  // 1. Fast check priority IPs across all routers (COFE 192.168.150.1, D-Link 192.168.0.1, Office 192.168.1.1, Direct 192.168.50.1)
   const priorityHosts = [...new Set([
     hostIp,
     "192.168.150.131",
@@ -906,7 +959,6 @@ async function autoDiscoverRov(manualTrigger = false) {
     return;
   }
 
-  // 2. Scan COFE router subnet (192.168.150.x) then D-Link (192.168.0.x) & Office (192.168.1.x)
   for (const subnet of ["192.168.150", "192.168.0", "192.168.1"]) {
     const hit = await scanSubnetPrefix(subnet);
     if (hit) {
@@ -934,7 +986,6 @@ function connectStream() {
   };
 
   streamImg.onerror = function() {
-    // Fallback to proxy stream on port 8080
     streamImg.src = `http://${hostIp}:8080/stream?t=${Date.now()}`;
     fetch(`http://${hostIp}:8080/api/status`)
       .then(r => r.json())
@@ -946,14 +997,13 @@ function connectStream() {
   };
 }
 
-// Periodic health check
 setInterval(() => {
   if (!isConnected && !isScanning) {
     autoDiscoverRov(false);
   }
 }, 8000);
 
-//── Autofocus & Zoom Controls ───────────────────────────────────────────────
+// ── Autofocus & Zoom Controls ───────────────────────────────────────────────
 function triggerAutofocus() {
   afReticle.style.borderColor = "#facc15";
   afReticle.style.transform = "translate(-50%, -50%) scale(1.15)";
@@ -1026,10 +1076,105 @@ function onZoomInput(val) {
   setZoom(parseInt(val) / 10);
 }
 
-// ── Touch Screen Swipe & Two-Finger Pinch-to-Zoom ──────────────────────────
+// ── Container Hanging Camera Orientation & Flip Controls ────────────────────
+function syncOrientationUI() {
+  const rotLbl = document.getElementById("hud-rot-lbl");
+  if (rotLbl) rotLbl.innerText = `${camRotate}°`;
+  const drawerRot = document.getElementById("drawer-rot-val");
+  if (drawerRot) {
+    let modeTag = camRotate === 180 ? "180° (Hanging)" : `${camRotate}°`;
+    if (flipV) modeTag += " +FlipV";
+    if (flipH) modeTag += " +MirrorH";
+    drawerRot.innerText = modeTag;
+  }
+  const hangBtn = document.getElementById("btn-hang-flip");
+  if (hangBtn) hangBtn.classList.toggle("active", camRotate === 180 || flipV);
+  const fvBtn = document.getElementById("btn-flip-v");
+  if (fvBtn) fvBtn.style.borderColor = flipV ? "var(--accent)" : "";
+  const fhBtn = document.getElementById("btn-flip-h");
+  if (fhBtn) fhBtn.style.borderColor = flipH ? "var(--accent)" : "";
+  const ipBtn = document.getElementById("btn-inv-pan");
+  if (ipBtn) ipBtn.style.borderColor = invertPan ? "var(--accent)" : "";
+  const itBtn = document.getElementById("btn-inv-tilt");
+  if (itBtn) itBtn.style.borderColor = invertTilt ? "var(--accent)" : "";
+  applyImageTransform();
+}
+
+function setCameraRotation(deg) {
+  camRotate = ((parseInt(deg, 10) % 360) + 360) % 360;
+  localStorage.setItem("rov_cam_rot", String(camRotate));
+  syncOrientationUI();
+  showIndicator(camRotate === 180 ? "🙃 HANGING VIEW (180°)" : `🔄 ROTATE: ${camRotate}°`);
+  setTimeout(hideIndicator, 800);
+}
+
+function cycleCameraRotation() {
+  const order = [0, 180, 90, 270];
+  const idx = order.indexOf(camRotate);
+  const next = order[(idx + 1) % order.length];
+  setCameraRotation(next);
+}
+
+function toggleHangingMode() {
+  if (camRotate === 180) {
+    setCameraRotation(0);
+  } else {
+    setCameraRotation(180);
+  }
+}
+
+function toggleFlipV() {
+  flipV = !flipV;
+  localStorage.setItem("rov_flip_v", flipV ? "1" : "0");
+  syncOrientationUI();
+  showIndicator(flipV ? "↕ VERTICAL FLIP ON" : "↕ VERTICAL FLIP OFF");
+  setTimeout(hideIndicator, 700);
+}
+
+function toggleFlipH() {
+  flipH = !flipH;
+  localStorage.setItem("rov_flip_h", flipH ? "1" : "0");
+  syncOrientationUI();
+  showIndicator(flipH ? "↔ MIRROR H ON" : "↔ MIRROR H OFF");
+  setTimeout(hideIndicator, 700);
+}
+
+function toggleInvertPan() {
+  invertPan = !invertPan;
+  localStorage.setItem("rov_inv_pan", invertPan ? "1" : "0");
+  syncOrientationUI();
+  showIndicator(invertPan ? "⇄ PAN L/R INVERTED" : "⇄ PAN L/R NORMAL");
+  setTimeout(hideIndicator, 700);
+}
+
+function toggleInvertTilt() {
+  invertTilt = !invertTilt;
+  localStorage.setItem("rov_inv_tilt", invertTilt ? "1" : "0");
+  syncOrientationUI();
+  showIndicator(invertTilt ? "⇅ TILT U/D INVERTED" : "⇅ TILT U/D NORMAL");
+  setTimeout(hideIndicator, 700);
+}
+
+// ── 360° Micro-Step ("Little-by-Little") Calibration ────────────────────────
+function onPanStepSizeChange(ms) {
+  panStepMs = Math.max(15, Math.min(200, parseInt(ms, 10) || 40));
+  localStorage.setItem("rov_pan_step_ms", String(panStepMs));
+  const estDeg = Math.max(3, Math.round(panStepMs * 0.25));
+  const lbl = document.getElementById("drawer-step-val");
+  if (lbl) lbl.innerText = `${panStepMs} ms (~${estDeg}°)`;
+  const sl = document.getElementById("drawer-step-slider");
+  if (sl) sl.value = panStepMs;
+  const hudMs = document.getElementById("lbl-step-ms");
+  if (hudMs) hudMs.innerText = `${panStepMs}ms`;
+}
+
+// Initialize saved step size & orientation on load
+onPanStepSizeChange(panStepMs);
+syncOrientationUI();
+
+// ── Touch Screen Little-by-Little Step & Two-Finger Pinch-to-Zoom ───────────
 let touchStartX = 0, touchStartY = 0;
 let isTouching = false;
-let currentSwipeAction = null;
 let tiltThrottleTimer = null;
 let initialPinchDist = null;
 let initialPinchZoom = 1.0;
@@ -1054,38 +1199,26 @@ function handleSwipeMove(curX, curY) {
   const dy = curY - touchStartY;
 
   if (Math.abs(dx) > Math.abs(dy)) {
-    if (dx < -30) {
-      if (currentSwipeAction !== 'left') {
-        currentSwipeAction = 'left';
-        showIndicator('◀ PAN LEFT');
-        postPan({action: 'left'});
-        updateLabels(40, undefined);
-      }
-    } else if (dx > 30) {
-      if (currentSwipeAction !== 'right') {
-        currentSwipeAction = 'right';
-        showIndicator('PAN RIGHT ▶');
-        postPan({action: 'right'});
-        updateLabels(140, undefined);
-      }
+    // Little-by-Little 360° Micro-Stepping: every 26px of finger drag triggers ONE tiny pulse step!
+    if (Math.abs(dx) >= 26 && !panSwipeCooldown) {
+      panSwipeCooldown = true;
+      setTimeout(() => { panSwipeCooldown = false; }, Math.max(140, panStepMs + 90));
+      touchStartX = curX;
+      touchStartY = curY;
+      const dir = dx < 0 ? 'left' : 'right';
+      triggerPanTimed(dir);
     }
   } else {
-    if (dy < -25) {
-      if (!tiltThrottleTimer) {
-        tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 120);
-        const nextTilt = Math.min(180, lastTiltSent + 5);
-        showIndicator(`▲ TILT UP (${nextTilt}°)`);
-        updateLabels(undefined, nextTilt);
-        postTilt({angle: nextTilt});
-      }
-    } else if (dy > 25) {
-      if (!tiltThrottleTimer) {
-        tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 120);
-        const nextTilt = Math.max(0, lastTiltSent - 5);
-        showIndicator(`▼ TILT DOWN (${nextTilt}°)`);
-        updateLabels(undefined, nextTilt);
-        postTilt({angle: nextTilt});
-      }
+    if (Math.abs(dy) >= 22 && !tiltThrottleTimer) {
+      tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 110);
+      touchStartY = curY;
+      touchStartX = curX;
+      const wantUp = dy < 0;
+      const delta = (wantUp !== invertTilt) ? 5 : -5;
+      const nextTilt = Math.max(0, Math.min(180, lastTiltSent + delta));
+      showIndicator(`${wantUp ? '▲ TILT UP' : '▼ TILT DOWN'} (${nextTilt}°)`);
+      updateLabels(undefined, nextTilt);
+      postTilt({angle: nextTilt});
     }
   }
 }
@@ -1094,12 +1227,7 @@ function handleSwipeEnd() {
   initialPinchDist = null;
   if (isTouching) {
     isTouching = false;
-    hideIndicator();
-    if (currentSwipeAction === 'left' || currentSwipeAction === 'right') {
-      currentSwipeAction = null;
-      postPan({action: 'stop'});
-      updateLabels(90, undefined);
-    }
+    setTimeout(hideIndicator, 250);
   }
 }
 
@@ -1112,7 +1240,6 @@ viewport.addEventListener('touchstart', e => {
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
     isTouching = true;
-    currentSwipeAction = null;
   }
 }, {passive: false});
 
@@ -1136,7 +1263,6 @@ viewport.addEventListener('mousedown', e => {
   touchStartX = e.clientX;
   touchStartY = e.clientY;
   isTouching = true;
-  currentSwipeAction = null;
 });
 window.addEventListener('mousemove', e => {
   if (!isTouching) return;
@@ -1144,7 +1270,7 @@ window.addEventListener('mousemove', e => {
 });
 window.addEventListener('mouseup', handleSwipeEnd);
 
-// ── Servo API Calls ────────────────────────────────────────────────────────
+// ── Servo API Calls (Micro-Stepping for 360° Modified SG90 Servo) ───────────
 function postPan(data) {
   fetch(getApiUrl('/api/pan'), {
     method: 'POST',
@@ -1167,10 +1293,9 @@ function postTilt(data) {
 
 function updateLabels(p, t) {
   if (p !== undefined) {
-    let tag = (p >= 85 && p <= 95) ? 'STOPPED' : (p < 85 ? '◀ SPIN L' : 'SPIN R ▶');
+    let tag = (p >= 84 && p <= 96) ? 'STOPPED' : (p < 84 ? '◀ STEP L' : 'STEP R ▶');
     document.getElementById('lbl-pan').innerText = tag;
     document.getElementById('drawer-pan-val').innerText = tag;
-    document.getElementById('drawer-pan-slider').value = p;
     lastPanSent = p;
   }
   if (t !== undefined) {
@@ -1182,14 +1307,56 @@ function updateLabels(p, t) {
   }
 }
 
-function sendTiltAction(act) { postTilt({action: act}); }
+function sendTiltAction(act) {
+  let effectiveAct = act;
+  if (invertTilt) {
+    if (act === 'up') effectiveAct = 'down';
+    else if (act === 'down') effectiveAct = 'up';
+  }
+  postTilt({action: effectiveAct});
+}
 
 function triggerPanTimed(dir) {
-  postPan({action: dir, duration: 0.5});
-  setTimeout(() => { updateLabels(90, undefined); }, 550);
+  const effectiveDir = invertPan ? (dir === 'left' ? 'right' : 'left') : dir;
+  const durSec = +(panStepMs / 1000).toFixed(3);
+  const estDeg = Math.max(3, Math.round(panStepMs * 0.25));
+
+  showIndicator(dir === 'left' ? `◀ STEP LEFT (~${estDeg}°)` : `STEP RIGHT (~${estDeg}°) ▶`);
+  updateLabels(dir === 'left' ? 75 : 105, undefined);
+
+  // Send micro-pulse duration to Pi (Pi's hardware timer cuts off PWM after durSec)
+  postPan({action: effectiveDir, duration: durSec});
+
+  // Redundant client-side stop safeguard
+  if (panStopBackupTimer) clearTimeout(panStopBackupTimer);
+  panStopBackupTimer = setTimeout(() => {
+    postPan({angle: 90});
+    updateLabels(90, undefined);
+    setTimeout(hideIndicator, 300);
+  }, panStepMs + 35);
+}
+
+function startPanHold(dir, ev) {
+  if (ev) ev.preventDefault();
+  stopPanHold();
+  triggerPanTimed(dir);
+  const repeatInterval = Math.max(200, panStepMs + 165);
+  panHoldInterval = setInterval(() => {
+    triggerPanTimed(dir);
+  }, repeatInterval);
+}
+
+function stopPanHold() {
+  if (panHoldInterval) {
+    clearInterval(panHoldInterval);
+    panHoldInterval = null;
+    postPan({angle: 90});
+    updateLabels(90, undefined);
+  }
 }
 
 function triggerPanStop() {
+  stopPanHold();
   updateLabels(90, undefined);
   postPan({angle: 90});
 }
@@ -1201,14 +1368,23 @@ function setTiltDirect(val) {
 
 function onPanSliderInput(val) {
   const p = parseInt(val);
-  updateLabels(p, undefined);
-  if (panTimer) clearTimeout(panTimer);
-  panTimer = setTimeout(() => { postPan({angle: p}); }, 40);
+  if (p >= 82 && p <= 98) {
+    stopPanHold();
+    updateLabels(90, undefined);
+    postPan({angle: 90});
+    return;
+  }
+  const dir = p < 90 ? 'left' : 'right';
+  if (!panTimer) {
+    triggerPanTimed(dir);
+    panTimer = setTimeout(() => { panTimer = null; }, Math.max(190, panStepMs + 150));
+  }
 }
 
 function releasePanToStop() {
   if (panSlider.value != 90) {
     panSlider.value = 90;
+    stopPanHold();
     updateLabels(90, undefined);
     postPan({angle: 90});
   }
@@ -1226,6 +1402,7 @@ function onTiltSliderInput(val) {
 }
 
 function recenterAll() {
+  stopPanHold();
   updateLabels(90, 90);
   postPan({angle: 90});
   postTilt({angle: 90});
@@ -1234,7 +1411,7 @@ function recenterAll() {
   setTimeout(hideIndicator, 800);
 }
 
-// ── Image Filters ──────────────────────────────────────────────────────────
+// ── Image Filters & Hanging Orientation Transform ───────────────────────────
 function applyImageTransform() {
   let filters = [];
   const b = document.getElementById("drawer-bright-slider").value;
@@ -1253,7 +1430,9 @@ function applyImageTransform() {
   }
 
   streamImg.style.filter = filters.join(" ");
-  streamImg.style.transform = `scale(${digitalZoom})`;
+  const sx = (flipH ? -1 : 1) * digitalZoom;
+  const sy = (flipV ? -1 : 1) * digitalZoom;
+  streamImg.style.transform = `rotate(${camRotate}deg) scale(${sx}, ${sy})`;
 }
 
 function onFilterChange() {
@@ -1289,15 +1468,24 @@ function toggleLowLightMode() {
   applyImageTransform();
 }
 
-// ── Snapshot & Video Recording ─────────────────────────────────────────────
+// ── Snapshot & Video Recording (Preserves Hanging Rotation & Flip) ──────────
+function drawOrientedFrame(ctx, w, h) {
+  ctx.save();
+  ctx.filter = streamImg.style.filter || 'none';
+  ctx.translate(w / 2, h / 2);
+  ctx.rotate((camRotate * Math.PI) / 180);
+  ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+  ctx.drawImage(streamImg, -w / 2, -h / 2, w, h);
+  ctx.restore();
+}
+
 function takeSnapshot() {
   try {
     const canvas = document.getElementById("capture-canvas");
     canvas.width = streamImg.naturalWidth || 1280;
     canvas.height = streamImg.naturalHeight || 720;
     const ctx = canvas.getContext("2d");
-    ctx.filter = streamImg.style.filter || 'none';
-    ctx.drawImage(streamImg, 0, 0, canvas.width, canvas.height);
+    drawOrientedFrame(ctx, canvas.width, canvas.height);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filename = `FishFinder_Photo_${timestamp}.jpg`;
@@ -1338,8 +1526,7 @@ function startRecording() {
 
     function drawLoop() {
       if (!isRecording) return;
-      ctx.filter = streamImg.style.filter || 'none';
-      ctx.drawImage(streamImg, 0, 0, canvas.width, canvas.height);
+      drawOrientedFrame(ctx, canvas.width, canvas.height);
       requestAnimationFrame(drawLoop);
     }
 
