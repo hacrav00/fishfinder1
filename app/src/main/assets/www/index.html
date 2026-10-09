@@ -556,7 +556,7 @@
     <div class="header-right">
       <button class="btn-top accent" onclick="autoDiscoverRov(true)">🔍 Auto-Find</button>
       <button class="btn-top" onclick="openIpModal()">🌐 <span id="btn-ip-lbl">192.168.150.131</span></button>
-      <button class="btn-top" onclick="reconnectStreamManual()" title="Refresh Live Video Feed">🔄 Feed</button>
+      <button class="btn-top active" id="btn-330-top" onclick="togglePan330Lock()" title="Activate/Deactivate 330° Servo Movement Limit Lock">🛡️ <span id="lbl-330-top">330° Lock</span></button>
       <button class="btn-top active" id="btn-fine-mode" onclick="togglePrecisionMode()" title="Toggle Ultra-Fine 1° / Micro-Pulse Precision Mode">🔬 <span id="btn-fine-lbl">Fine 1°</span></button>
       <button class="btn-top" onclick="cycleHandGrip()" title="Flip Screen for Left/Right Hand Grip">📱 <span id="btn-grip-lbl">L-Cam</span></button>
       <button class="btn-top" onclick="recenterAll()">⨁ Center (<span id="hdr-center-lbl">92°</span>)</button>
@@ -591,10 +591,10 @@
 
     <!-- Position HUD -->
     <div id="hud-info">
-      Pan: <b id="lbl-pan">STOPPED</b> (<span id="lbl-step-ms">20ms</span>) &nbsp;|&nbsp; Tilt: <b id="lbl-tilt">92°</b> (<span id="lbl-tilt-step">1°</span>) &nbsp;|&nbsp; Zoom: <b id="lbl-zoom">1.0x</b>
+      Pan: <b id="lbl-pan">STOPPED</b> [<span id="lbl-pan-deg">0° / ±165° 🛡️330°</span>] &nbsp;|&nbsp; Tilt: <b id="lbl-tilt">92°</b> (<span id="lbl-tilt-step">1°</span>) &nbsp;|&nbsp; Zoom: <b id="lbl-zoom">1.0x</b>
     </div>
     <div id="hud-hint">
-      🔒 Touch-Lock ON (Use D-Pad ▲▼◀▶ to Move) | Center: <span id="hud-center-lbl">92°</span>
+      🛡️ 330° Lock ON (±165° Max) | 🔒 Touch-Lock ON | Center: <span id="hud-center-lbl">92°</span>
     </div>
   </div>
 
@@ -613,6 +613,10 @@
       <button class="btn-action" onclick="stepZoom(-0.5)">
         <span class="icon">🔍-</span>
         <span>Zoom Out</span>
+      </button>
+      <button class="btn-action active" id="btn-330-bottom" onclick="togglePan330Lock()">
+        <span class="icon">🛡️</span>
+        <span id="lbl-330-btn">330° ON</span>
       </button>
       <button class="btn-action active" id="btn-fine-bottom" onclick="togglePrecisionMode()">
         <span class="icon">🔬</span>
@@ -657,18 +661,23 @@
   <!-- Settings & Sliders Slide-up Drawer -->
   <div id="settings-drawer">
     <div class="drawer-header">
-      <div class="drawer-title">🎛️ ROV Motor Lock, Center Calibration (92°), Hanging Mount &amp; Camera Controls</div>
+      <div class="drawer-title">🎛️ ROV 330° Lock System, Center Calibration (92°), Hanging Mount &amp; Controls</div>
       <button class="btn-close" onclick="toggleSettingsDrawer()">✕</button>
     </div>
     <div class="drawer-grid">
-      <!-- 360° Pan Micro-Step ("Little by Little") & Accidental Touch Lock Calibration Card -->
+      <!-- 330° Servo Lock & Micro-Step ("Little by Little") Calibration Card -->
       <div class="slider-card">
         <div class="slider-header">
-          <span>360° Pan Step Size &amp; Touch Lock</span>
-          <span id="drawer-step-val" class="slider-val">20 ms (~3°)</span>
+          <span>330° Movement Lock &amp; Pan Step Size</span>
+          <span id="drawer-step-val" class="slider-val">20 ms (~3.2°) | 🛡️ 330° ON</span>
         </div>
         <input type="range" id="drawer-step-slider" min="10" max="120" step="2" value="20" oninput="onPanStepSizeChange(this.value)">
         <div class="preset-row">
+          <span class="preset-btn" id="btn-330-drawer" onclick="togglePan330Lock()" style="border-color:var(--accent); color:var(--accent); font-weight:bold;">🛡️ 330° Lock: ON (±165°)</span>
+          <span class="preset-btn" onclick="zeroPanHeading()">📌 Set Pan 0° Here</span>
+          <span class="preset-btn" onclick="unwindPanToZero()">↩ Unwind to 0°</span>
+        </div>
+        <div class="preset-row" style="margin-top:4px;">
           <span class="preset-btn" onclick="onPanStepSizeChange(12)">Ultra 12ms (~2°)</span>
           <span class="preset-btn" onclick="onPanStepSizeChange(20)" style="color:var(--accent); font-weight:bold;">Fine 20ms (~3°)</span>
           <span class="preset-btn" onclick="onPanStepSizeChange(35)">Small 35ms (~6°)</span>
@@ -735,8 +744,8 @@
       <!-- Pan Continuous Micro-Step Slider -->
       <div class="slider-card">
         <div class="slider-header">
-          <span>Pan (360° Micro-Step Control)</span>
-          <span id="drawer-pan-val" class="slider-val">STOPPED</span>
+          <span>Pan (330° Range: -165° L to +165° R)</span>
+          <span id="drawer-pan-val" class="slider-val">0° (STOPPED)</span>
         </div>
         <input type="range" id="drawer-pan-slider" min="0" max="180" value="90" oninput="onPanSliderInput(this.value)">
         <div class="preset-row">
@@ -832,7 +841,11 @@ let recordedChunks = [];
 let recTimerInterval = null;
 let recSeconds = 0;
 
-// 360° Ultra-Fine Micro-Step & Safety Lock State
+// 330° Movement Lock, Ultra-Fine Micro-Step & Safety Lock State
+let pan330Lock = localStorage.getItem("rov_pan_330_lock") !== "0";
+const PAN_HALF_LIMIT = 165; // -165° Left to +165° Right = 330° Total Allowed Travel
+let panVirtualDeg = parseFloat(localStorage.getItem("rov_pan_virtual_deg") || "0");
+if (isNaN(panVirtualDeg) || panVirtualDeg < -PAN_HALF_LIMIT || panVirtualDeg > PAN_HALF_LIMIT) panVirtualDeg = 0;
 let precisionMode = localStorage.getItem("rov_precision_mode") !== "0";
 let panStepMs = parseInt(localStorage.getItem("rov_pan_step_ms") || "20", 10);
 if (isNaN(panStepMs) || panStepMs < 10 || panStepMs > 250) panStepMs = 20;
@@ -1302,15 +1315,41 @@ function toggleInvertTilt() {
   setTimeout(hideIndicator, 700);
 }
 
-// ── 360° Ultra-Fine Micro-Step, Center Calibration (92°) & Touch Lock ──────
+// ── 330° Movement Lock, Ultra-Fine Micro-Step & Center Calibration (92°) ────
+function formatSignedDeg(d) {
+  const v = +parseFloat(d).toFixed(1);
+  return (v > 0 ? `+${v}°` : `${v}°`);
+}
+
 function syncPrecisionUI() {
   const estDeg = Math.max(1.5, +(panStepMs * 0.16).toFixed(1));
+  const lock330Tag = pan330Lock ? " | 🛡️ 330° ON" : " | 🔓 360° Free";
   const lbl = document.getElementById("drawer-step-val");
-  if (lbl) lbl.innerText = `${panStepMs} ms (~${estDeg}°)`;
+  if (lbl) lbl.innerText = `${panStepMs} ms (~${estDeg}°)${lock330Tag}`;
   const sl = document.getElementById("drawer-step-slider");
   if (sl) sl.value = panStepMs;
-  const hudMs = document.getElementById("lbl-step-ms");
-  if (hudMs) hudMs.innerText = `${panStepMs}ms`;
+
+  const panDegHud = document.getElementById("lbl-pan-deg");
+  if (panDegHud) {
+    panDegHud.innerText = pan330Lock
+      ? `${formatSignedDeg(panVirtualDeg)} / ±${PAN_HALF_LIMIT}° 🛡️330°`
+      : `${formatSignedDeg(panVirtualDeg)} (🔓360° Free)`;
+  }
+
+  const top330Btn = document.getElementById("btn-330-top");
+  const top330Lbl = document.getElementById("lbl-330-top");
+  const bot330Btn = document.getElementById("btn-330-bottom");
+  const bot330Lbl = document.getElementById("lbl-330-btn");
+  const drw330Btn = document.getElementById("btn-330-drawer");
+  if (top330Btn) top330Btn.classList.toggle("active", pan330Lock);
+  if (top330Lbl) top330Lbl.innerText = pan330Lock ? "330° Lock" : "360° Free";
+  if (bot330Btn) bot330Btn.classList.toggle("active", pan330Lock);
+  if (bot330Lbl) bot330Lbl.innerText = pan330Lock ? "330° ON" : "330° OFF";
+  if (drw330Btn) {
+    drw330Btn.innerText = pan330Lock ? "🛡️ 330° Lock: ON (±165°)" : "🔓 330° Lock: OFF (Free)";
+    drw330Btn.style.borderColor = pan330Lock ? "var(--accent)" : "";
+    drw330Btn.style.color = pan330Lock ? "var(--accent)" : "";
+  }
 
   const lockBtn = document.getElementById("btn-touch-lock");
   if (lockBtn) {
@@ -1321,9 +1360,9 @@ function syncPrecisionUI() {
 
   const hudHint = document.getElementById("hud-hint");
   if (hudHint) {
-    hudHint.innerHTML = touchSwipeLocked
-      ? `🔒 Touch-Lock ON (Use D-Pad ▲▼◀▶ to Move) | Center: <span id="hud-center-lbl">${centerTiltDeg}°</span>`
-      : `👆 Swipe to Step | D-Pad ▲▼◀▶ | Center: <span id="hud-center-lbl">${centerTiltDeg}°</span>`;
+    const mode330Txt = pan330Lock ? `🛡️ 330° Lock ON (±165° Max)` : `🔓 360° Free Mode`;
+    const touchTxt = touchSwipeLocked ? `🔒 Touch-Lock ON` : `👆 Swipe ON`;
+    hudHint.innerHTML = `${mode330Txt} | ${touchTxt} | Center: <span id="hud-center-lbl">${centerTiltDeg}°</span>`;
   }
 
   const hdrCenter = document.getElementById("hdr-center-lbl");
@@ -1356,6 +1395,56 @@ function syncPrecisionUI() {
   if (botLbl) botLbl.innerText = isFine ? `Fine ${tiltStepDeg}°` : `Norm ${tiltStepDeg}°`;
 }
 
+function togglePan330Lock() {
+  pan330Lock = !pan330Lock;
+  localStorage.setItem("rov_pan_330_lock", pan330Lock ? "1" : "0");
+  if (pan330Lock) {
+    // Clamp virtual heading inside [-165°, +165°] when enabling 330° Lock
+    panVirtualDeg = Math.max(-PAN_HALF_LIMIT, Math.min(PAN_HALF_LIMIT, panVirtualDeg));
+    localStorage.setItem("rov_pan_virtual_deg", String(panVirtualDeg));
+  }
+  syncPrecisionUI();
+  updateLabels(90, undefined);
+  showIndicator(pan330Lock ? "🛡️ 330° MOVEMENT LOCK ACTIVATED (±165°)" : "🔓 330° LOCK OFF (FREE 360°)");
+  setTimeout(hideIndicator, 1000);
+}
+
+function zeroPanHeading() {
+  forcePanStopImmediate();
+  panVirtualDeg = 0;
+  localStorage.setItem("rov_pan_virtual_deg", "0");
+  syncPrecisionUI();
+  updateLabels(90, undefined);
+  showIndicator("📌 PAN 0° SET AT CURRENT HEADING (330° Range: -165° to +165°)");
+  setTimeout(hideIndicator, 1100);
+}
+
+async function unwindPanToZero() {
+  if (Math.abs(panVirtualDeg) < 1.5) {
+    panVirtualDeg = 0;
+    localStorage.setItem("rov_pan_virtual_deg", "0");
+    syncPrecisionUI();
+    showIndicator("✓ PAN ALREADY AT 0° CENTER");
+    setTimeout(hideIndicator, 700);
+    return;
+  }
+  stopPanHold();
+  const maxSteps = 60;
+  for (let i = 0; i < maxSteps; i++) {
+    if (Math.abs(panVirtualDeg) < 1.5) break;
+    const dir = panVirtualDeg > 0 ? 'left' : 'right';
+    const neededMs = Math.max(10, Math.min(panStepMs, Math.round(Math.abs(panVirtualDeg) / 0.16)));
+    await triggerPanTimed(dir, neededMs);
+    await new Promise(r => setTimeout(r, 90));
+  }
+  panVirtualDeg = 0;
+  localStorage.setItem("rov_pan_virtual_deg", "0");
+  syncPrecisionUI();
+  updateLabels(90, undefined);
+  showIndicator("✓ PAN UNWOUND TO 0° CENTER");
+  setTimeout(hideIndicator, 800);
+}
+
 function onPanStepSizeChange(ms) {
   panStepMs = Math.max(10, Math.min(200, parseInt(ms, 10) || 20));
   localStorage.setItem("rov_pan_step_ms", String(panStepMs));
@@ -1373,10 +1462,12 @@ function toggleTouchSwipeLock() {
 function saveCurrentAsCenter() {
   centerTiltDeg = +parseFloat(lastTiltSent).toFixed(1);
   localStorage.setItem("rov_center_tilt", String(centerTiltDeg));
+  panVirtualDeg = 0;
+  localStorage.setItem("rov_pan_virtual_deg", "0");
   forcePanStopImmediate();
   syncPrecisionUI();
   updateLabels(90, centerTiltDeg);
-  showIndicator(`📌 SAVED ${centerTiltDeg}° AS CENTER!`);
+  showIndicator(`📌 SAVED CENTER: Tilt ${centerTiltDeg}° & Pan 0°!`);
   setTimeout(hideIndicator, 1000);
 }
 
@@ -1507,7 +1598,7 @@ window.addEventListener('mousemove', e => {
 });
 window.addEventListener('mouseup', handleSwipeEnd);
 
-// ── Servo API Calls (Strictly Sequenced so Pan NEVER Spins on Its Own!) ─────
+// ── Servo API Calls (Strictly Sequenced + 330° Movement Lock Enforcement) ───
 function forcePanStopImmediate() {
   if (panStopBackupTimer) {
     clearTimeout(panStopBackupTimer);
@@ -1554,7 +1645,14 @@ function updateLabels(p, t) {
   if (p !== undefined) {
     let tag = (p >= 84 && p <= 96) ? 'STOPPED' : (p < 84 ? '◀ STEP L' : 'STEP R ▶');
     document.getElementById('lbl-pan').innerText = tag;
-    document.getElementById('drawer-pan-val').innerText = tag;
+    const drPan = document.getElementById('drawer-pan-val');
+    if (drPan) drPan.innerText = `${formatSignedDeg(panVirtualDeg)} (${tag})`;
+    const panDegHud = document.getElementById("lbl-pan-deg");
+    if (panDegHud) {
+      panDegHud.innerText = pan330Lock
+        ? `${formatSignedDeg(panVirtualDeg)} / ±${PAN_HALF_LIMIT}° 🛡️330°`
+        : `${formatSignedDeg(panVirtualDeg)} (🔓360° Free)`;
+    }
     lastPanSent = p;
   }
   if (t !== undefined) {
@@ -1599,15 +1697,50 @@ let panStepInFlight = false;
 
 async function triggerPanTimed(dir, customMs) {
   if (panStepInFlight) return;
-  panStepInFlight = true;
 
-  const stepMs = customMs || panStepMs;
+  let stepMs = customMs || panStepMs;
+  let estDeg = Math.max(1.5, +(stepMs * 0.16).toFixed(1));
+  const deltaSign = (dir === 'left') ? -1 : 1;
+
+  // Enforce 330° Servo Movement Lock (-165° Left to +165° Right = 330° Total Allowed Travel)
+  if (pan330Lock) {
+    if (deltaSign < 0 && panVirtualDeg <= -PAN_HALF_LIMIT) {
+      if (panHoldInterval) { clearInterval(panHoldInterval); panHoldInterval = null; }
+      forcePanStopImmediate();
+      showIndicator(`🛡️ 330° LEFT LIMIT (-${PAN_HALF_LIMIT}°) REACHED! Reverse ▶`);
+      setTimeout(hideIndicator, 900);
+      return;
+    }
+    if (deltaSign > 0 && panVirtualDeg >= PAN_HALF_LIMIT) {
+      if (panHoldInterval) { clearInterval(panHoldInterval); panHoldInterval = null; }
+      forcePanStopImmediate();
+      showIndicator(`🛡️ 330° RIGHT LIMIT (+${PAN_HALF_LIMIT}°) REACHED! Reverse ◀`);
+      setTimeout(hideIndicator, 900);
+      return;
+    }
+    // Clamp step near the ±165° boundary so it stops at exact ±165°
+    const remainingDeg = (deltaSign < 0)
+      ? (panVirtualDeg - (-PAN_HALF_LIMIT))
+      : (PAN_HALF_LIMIT - panVirtualDeg);
+    if (estDeg > remainingDeg) {
+      estDeg = +remainingDeg.toFixed(1);
+      stepMs = Math.max(8, Math.round(estDeg / 0.16));
+    }
+  }
+
+  panStepInFlight = true;
+  panVirtualDeg = +(panVirtualDeg + deltaSign * estDeg).toFixed(1);
+  if (pan330Lock) {
+    panVirtualDeg = Math.max(-PAN_HALF_LIMIT, Math.min(PAN_HALF_LIMIT, panVirtualDeg));
+  }
+  localStorage.setItem("rov_pan_virtual_deg", String(panVirtualDeg));
+
   const effectiveDir = invertPan ? (dir === 'left' ? 'right' : 'left') : dir;
   const targetAngle = (effectiveDir === 'left') ? 0 : 180;
   const durSec = +(stepMs / 1000).toFixed(3);
-  const estDeg = Math.max(1.5, +(stepMs * 0.16).toFixed(1));
 
-  showIndicator(dir === 'left' ? `◀ STEP LEFT (~${estDeg}°)` : `STEP RIGHT (~${estDeg}°) ▶`);
+  const rangeInfo = pan330Lock ? ` [${formatSignedDeg(panVirtualDeg)} / ±${PAN_HALF_LIMIT}°]` : ` [${formatSignedDeg(panVirtualDeg)}]`;
+  showIndicator(dir === 'left' ? `◀ LEFT (~${estDeg}°)${rangeInfo}` : `RIGHT (~${estDeg}°) ▶${rangeInfo}`);
   updateLabels(targetAngle, undefined);
 
   // 1. Strictly AWAIT the start request so it never arrives AFTER the stop request!
@@ -1727,7 +1860,7 @@ function recenterAll() {
   updateLabels(90, centerTiltDeg);
   postTilt({angle: centerTiltDeg});
   setZoom(1.0);
-  showIndicator(`⨁ CENTERED (Tilt ${centerTiltDeg}° | Pan STOP)`);
+  showIndicator(`⨁ CENTERED (Tilt ${centerTiltDeg}° | Pan ${formatSignedDeg(panVirtualDeg)})`);
   setTimeout(hideIndicator, 900);
 }
 
