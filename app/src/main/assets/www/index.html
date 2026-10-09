@@ -606,101 +606,6 @@
       border-color: var(--accent);
     }
 
-    /* Interactive Rolling Ring Dial (150° Fixed at Top, Roll Ring to Turn Left-Right Servo) */
-    #ring-dial-widget {
-      position: absolute;
-      right: 10px;
-      top: 48px;
-      width: 180px;
-      background: rgba(9, 13, 22, 0.90);
-      border: 1.5px solid rgba(0, 229, 181, 0.48);
-      border-radius: 16px;
-      padding: 6px 7px 8px 7px;
-      z-index: 48;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-      backdrop-filter: blur(10px);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.75);
-      user-select: none;
-      touch-action: none;
-    }
-    .ring-header {
-      width: 100%;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 9.5px;
-      font-weight: 700;
-      color: var(--accent);
-      padding: 0 2px;
-    }
-    .ring-fixed-badge {
-      font-size: 9px;
-      font-weight: 800;
-      color: #00e5b5;
-      background: rgba(0, 229, 181, 0.14);
-      border: 1px solid rgba(0, 229, 181, 0.45);
-      border-radius: 6px;
-      padding: 1px 6px;
-      letter-spacing: 0.3px;
-    }
-    .ring-svg-wrap {
-      position: relative;
-      width: 158px;
-      height: 158px;
-      touch-action: none;
-      cursor: grab;
-    }
-    .ring-svg-wrap:active {
-      cursor: grabbing;
-    }
-    .ring-center-info {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      pointer-events: auto;
-      cursor: pointer;
-      width: 64px;
-      height: 64px;
-      border-radius: 50%;
-      background: rgba(15, 21, 33, 0.95);
-      border: 1.5px solid rgba(0, 229, 181, 0.35);
-      text-align: center;
-      box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.7);
-    }
-    .ring-center-info:active {
-      background: var(--accent-dark);
-      border-color: var(--accent);
-    }
-    .ring-Quick-row {
-      display: flex;
-      justify-content: space-between;
-      width: 100%;
-      gap: 3px;
-    }
-    .ring-qbtn {
-      flex: 1;
-      background: rgba(33, 43, 61, 0.9);
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      color: #e2e8f0;
-      font-size: 9px;
-      font-weight: 700;
-      padding: 4px 0;
-      border-radius: 5px;
-      text-align: center;
-      cursor: pointer;
-    }
-    .ring-qbtn:active {
-      background: var(--accent);
-      color: #000;
-    }
   </style>
 </head>
 <body>
@@ -718,7 +623,6 @@
     <div class="header-right">
       <button class="btn-top accent" onclick="autoDiscoverRov(true)">🔍 Auto-Find</button>
       <button class="btn-top" onclick="openIpModal()">🌐 <span id="btn-ip-lbl">192.168.150.131</span></button>
-      <button class="btn-top active" id="btn-ring-top" onclick="toggleRingDialWidget()" title="Show/Hide Rolling Ring">⭕ <span id="lbl-ring-top">Ring ON</span></button>
       <button class="btn-top active" id="btn-touch-top" onclick="toggleTouchSwipeLock()" title="Activate or Deactivate Touchscreen Hand Control"><span id="ico-touch-top">👆</span> <span id="lbl-touch-top">Touch ON</span></button>
       <button class="btn-top" onclick="cycleHandGrip()" title="Flip Screen for Left/Right Hand Grip">📱 <span id="btn-grip-lbl">L-Cam</span></button>
       <button class="btn-top" onclick="recenterAll()">⨁ Center (<span id="hdr-center-lbl">92°</span>)</button>
@@ -735,49 +639,6 @@
     <div id="af-reticle"></div>
     <div id="hud-indicator">SWIPE</div>
     <div id="rec-indicator">● REC <span id="rec-timer">00:00</span></div>
-
-    <!-- Interactive Rolling Ring (150° Fixed Top Reference; Roll Ring to Turn Left-Right Servo) -->
-    <div id="ring-dial-widget">
-      <div class="ring-header">
-        <span>⭕ ROLLING RING</span>
-        <div style="display:flex; gap:5px;">
-          <span onclick="calibrateRingNeedleHere(0)" style="cursor:pointer; color:#38bdf8;" title="Set current camera position as 0°">📌0°</span>
-          <span onclick="calibrateRingNeedleHere(150)" style="cursor:pointer; color:#00e5b5;" title="Set current camera position as 150° Fixed Top">📌150°</span>
-        </div>
-      </div>
-      <div class="ring-fixed-badge" title="150° is the fixed top home reference — roll the ring left/right to turn the servo">▼ 150° FIXED TOP POINTER</div>
-      <div class="ring-svg-wrap" id="ring-touch-area">
-        <svg id="ring-svg" width="158" height="158" viewBox="0 0 158 158">
-          <!-- Outer stationary bezel -->
-          <circle cx="79" cy="79" r="56" fill="none" stroke="#1e293b" stroke-width="12" />
-          <!-- Rotatable Ring Wheel Group (rotates as user rolls the ring so chosen angle aligns under fixed top pointer) -->
-          <g id="ring-wheel-group" transform="rotate(0, 79, 79)">
-            <!-- Active 0°..300° arc track on the wheel -->
-            <path id="ring-active-arc" d="M 51 127.5 A 56 56 0 1 1 107 127.5" fill="none" stroke="rgba(0, 229, 181, 0.25)" stroke-width="11" stroke-linecap="round" />
-            <!-- Locked bottom safety zone arc -->
-            <path id="ring-locked-arc" d="M 51 127.5 A 56 56 0 0 0 107 127.5" fill="none" stroke="rgba(239, 68, 68, 0.45)" stroke-width="9" stroke-linecap="butt" />
-            <!-- 0°, 10°, 20°, 30° ... 150° ... 300° Tick Marks & Labels on the Rolling Wheel -->
-            <g id="ring-ticks-group"></g>
-          </g>
-          <!-- Fixed Top 150° Reference Marker & Stationary Top Lubber Pointer (NEVER moves, stays at 12 o'clock) -->
-          <polygon points="79,19 72,6 86,6" fill="#00e5b5" stroke="#090d16" stroke-width="1.2" />
-          <line x1="79" y1="19" x2="79" y2="34" stroke="#f59e0b" stroke-width="3" stroke-linecap="round" />
-          <circle cx="79" cy="23" r="5" fill="#f59e0b" stroke="#ffffff" stroke-width="1.8" />
-        </svg>
-        <div class="ring-center-info" onclick="onRingCenterTap()" title="Tap to roll ring back to 150° Fixed Home (or Stop)">
-          <div style="font-size:7.5px; color:#00e5b5; font-weight:800;">150° FIXED</div>
-          <div id="ring-target-txt" style="font-size:14px; font-weight:800; color:#f59e0b; font-family:monospace; line-height:1.1;">150°</div>
-          <div id="ring-curr-txt" style="font-size:8.5px; font-weight:700; color:#38bdf8; font-family:monospace;">Cam:150°</div>
-        </div>
-      </div>
-      <div class="ring-Quick-row">
-        <span class="ring-qbtn" onclick="stepRingNeedle(-10)" style="color:#38bdf8;">◀-10°</span>
-        <span class="ring-qbtn" onclick="commandRingDegree(0)">0°</span>
-        <span class="ring-qbtn" onclick="commandRingDegree(150)" style="color:var(--accent);">150°</span>
-        <span class="ring-qbtn" onclick="commandRingDegree(300)">300°</span>
-        <span class="ring-qbtn" onclick="stepRingNeedle(10)" style="color:#38bdf8;">+10°▶</span>
-      </div>
-    </div>
 
     <!-- Single Left Floating Autofocus, Zoom (Only 1 Zoom In/Out on Screen), Touch Toggle & Rotation Controls -->
     <div id="zoom-focus-bar">
@@ -803,21 +664,17 @@
       Pan: <b id="lbl-pan">STOPPED</b> [<span id="lbl-pan-deg">150° / 300° 🛡️Lock</span>] &nbsp;|&nbsp; Tilt: <b id="lbl-tilt">92°</b> (<span id="lbl-tilt-step">1°</span>) &nbsp;|&nbsp; Zoom: <b id="lbl-zoom">1.0x</b>
     </div>
     <div id="hud-hint">
-      👆 Touch Screen: L➔Left, R➔Right, Up➔Down, Down➔Up | ⭕ Roll Ring or Use Servo Sliders
+      👆 Touch Screen: L➔Left, R➔Right, Up➔Down, Down➔Up | 🎚️ Use L/R &amp; U/D Servo Sliders Below
     </div>
   </div>
 
   <!-- Bottom Control Bar (Action Buttons + Live Left/Right & Up/Down Servo Sliders) -->
   <div id="bottom-bar">
-    <!-- Camera Action Buttons (No duplicate Zoom buttons; 330° Lock moved to Hidden Controls) -->
+    <!-- Camera Action Buttons (No duplicate Zoom buttons; 330° Lock in Hidden Controls) -->
     <div class="action-group">
       <button class="btn-action active" id="btn-touch-bottom" onclick="toggleTouchSwipeLock()">
         <span class="icon" id="ico-touch-btn">👆</span>
         <span id="lbl-touch-btn">Touch ON</span>
-      </button>
-      <button class="btn-action active" id="btn-ring-bottom" onclick="toggleRingDialWidget()">
-        <span class="icon">⭕</span>
-        <span id="lbl-ring-btn">Roll Ring</span>
       </button>
       <button class="btn-action" onclick="toggleSettingsDrawer()" style="border-color:var(--accent); color:var(--accent);">
         <span class="icon">🎛️</span>
@@ -855,16 +712,16 @@
 
     <!-- Live On-Screen Servo Sliders (Replaces Up/Down/Left/Right D-Pad on Main Screen) -->
     <div class="servo-sliders-deck">
-      <!-- Left / Right Pan Servo Slider (0°–300°, 150° Center, Synced with Rolling Ring) -->
+      <!-- Left / Right Pan Servo Slider (0°–300°, 150° Center, 10° Slow Micro-Steps) -->
       <div class="servo-slider-row">
         <div class="servo-slider-head">
-          <span>◀ LEFT / RIGHT SERVO</span>
+          <span>◀ LEFT / RIGHT SERVO (10° STEP)</span>
           <span class="servo-slider-val" id="main-pan-lbl">150° (Center)</span>
         </div>
         <div class="servo-slider-track">
-          <button class="servo-step-btn" onpointerdown="startPanHold('left', event)" onpointerup="stopPanHold()" onpointerleave="stopPanHold()" onpointercancel="stopPanHold()" title="Step Left">◀</button>
+          <button class="servo-step-btn" onpointerdown="startPanHold('left', event)" onpointerup="stopPanHold()" onpointerleave="stopPanHold()" onpointercancel="stopPanHold()" title="Step Left 10°">◀</button>
           <input type="range" id="main-pan-slider" min="0" max="300" step="10" value="150" oninput="onMainPanSliderInput(this.value)">
-          <button class="servo-step-btn" onpointerdown="startPanHold('right', event)" onpointerup="stopPanHold()" onpointerleave="stopPanHold()" onpointercancel="stopPanHold()" title="Step Right">▶</button>
+          <button class="servo-step-btn" onpointerdown="startPanHold('right', event)" onpointerup="stopPanHold()" onpointerleave="stopPanHold()" onpointercancel="stopPanHold()" title="Step Right 10°">▶</button>
         </div>
       </div>
       <!-- Down / Up Tilt Servo Slider (0°–180°, 92° Center) -->
@@ -885,35 +742,34 @@
   <!-- Hidden Controls & Sliders Slide-up Drawer -->
   <div id="settings-drawer">
     <div class="drawer-header">
-      <div class="drawer-title">🎛️ Hidden Controls: 330° Lock, Servo Sliders, Speed Balance &amp; D-Pad</div>
+      <div class="drawer-title">🎛️ Hidden Controls: 330° Lock, Slow 10° Servo Speed, Sliders &amp; D-Pad</div>
       <button class="btn-close" onclick="toggleSettingsDrawer()">✕</button>
     </div>
     <div class="drawer-grid">
-      <!-- 330° / 300° Servo Lock & Left/Right Independent Pulse Calibration Card -->
+      <!-- 330° / 300° Servo Lock & Slow Left/Right Pulse Calibration Card -->
       <div class="slider-card">
         <div class="slider-header">
-          <span>330° / 300° Lock &amp; Left/Right Servo Speed</span>
-          <span id="drawer-step-val" class="slider-val">L:45ms | R:30ms | 🛡️0°–300°</span>
+          <span>330° / 300° Lock &amp; Slow 10° Step Speed</span>
+          <span id="drawer-step-val" class="slider-val">L:24ms | R:20ms | 🛡️0°–300°</span>
         </div>
         <div style="display:flex; align-items:center; gap:6px; font-size:10px; color:#94a3b8;">
           <span style="min-width:56px;">◀ Left ms:</span>
-          <input type="range" id="drawer-step-slider" min="20" max="140" step="2" value="45" oninput="onPanStepSizeChange(this.value)">
+          <input type="range" id="drawer-step-slider" min="14" max="80" step="1" value="24" oninput="onPanStepSizeChange(this.value)">
         </div>
         <div style="display:flex; align-items:center; gap:6px; font-size:10px; color:#94a3b8;">
           <span style="min-width:56px;">▶ Right ms:</span>
-          <input type="range" id="drawer-rstep-slider" min="16" max="120" step="2" value="30" oninput="onPanRightStepChange(this.value)">
+          <input type="range" id="drawer-rstep-slider" min="12" max="70" step="1" value="20" oninput="onPanRightStepChange(this.value)">
         </div>
         <div class="preset-row">
           <span class="preset-btn" id="btn-330-drawer" onclick="setPanLimitMode(330)" style="border-color:#38bdf8; color:#38bdf8; font-weight:bold;">🛡️ 330° Lock (0°–330°)</span>
           <span class="preset-btn" id="btn-300-drawer" onclick="setPanLimitMode(300)" style="border-color:var(--accent); color:var(--accent); font-weight:bold;">🛡️ 300° Lock (0°–300°)</span>
           <span class="preset-btn" id="btn-free-drawer" onclick="setPanLimitMode(0)">🔓 360° Free</span>
-          <span class="preset-btn" onclick="zeroPanHeading()">📌 Set 150° Here</span>
-          <span class="preset-btn" onclick="unwindPanToZero()">↩ Move to 150°</span>
+          <span class="preset-btn" onclick="zeroPanHeading()">📌 Set 150° Center Here</span>
         </div>
         <div class="preset-row" style="margin-top:4px;">
-          <span class="preset-btn" onclick="setRightCalibration(24, 180)">▶ Gentle R (24ms)</span>
-          <span class="preset-btn" onclick="setRightCalibration(30, 180)" style="color:var(--accent); font-weight:bold;">▶ Balanced R (30ms)</span>
-          <span class="preset-btn" onclick="setRightCalibration(42, 180)">▶ Strong R (42ms)</span>
+          <span class="preset-btn" onclick="setBothPanSpeeds(18, 15)">🐌 Ultra-Slow (18/15ms)</span>
+          <span class="preset-btn" onclick="setBothPanSpeeds(24, 20)" style="color:var(--accent); font-weight:bold;">🔬 10° Step (24/20ms)</span>
+          <span class="preset-btn" onclick="setBothPanSpeeds(32, 26)">⚡ Medium (32/26ms)</span>
           <span class="preset-btn" id="btn-touch-lock" onclick="toggleTouchSwipeLock()" style="border-color:var(--accent); color:var(--accent); font-weight:bold;">👆 Touch Gesture: ON</span>
         </div>
       </div>
@@ -1101,25 +957,22 @@ let recordedChunks = [];
 let recTimerInterval = null;
 let recSeconds = 0;
 
-// 300° / 330° Movement Lock, Left/Right Speed Balance & 360° Ring Slider State
+// 300° / 330° Movement Lock, Slow 10° Step Calibration & Servo Sliders State
 let panLimitDeg = parseInt(localStorage.getItem("rov_pan_limit_deg") || "300", 10);
 if (panLimitDeg !== 300 && panLimitDeg !== 330 && panLimitDeg !== 0) panLimitDeg = 300;
-// Start at 0 (150° center on the 0°–300° ring) on app launch so servo is never stuck at a 0°/300° limit from a prior session
+// Start at 0 (150° center on the 0°–300° slider) on app launch
 let panVirtualDeg = 0;
 localStorage.setItem("rov_pan_virtual_deg", "0");
 let panTargetDeg = 0;
-let ringDialVisible = localStorage.getItem("rov_ring_visible") !== "0";
-let ringSeekActive = false;
-let isDraggingRing = false;
+let panSliderSeekActive = false;
 
 let precisionMode = localStorage.getItem("rov_precision_mode") !== "0";
-// 50Hz servo PWM has a 20ms period: use 45ms Left (at 0°=600µs) and 30ms Right (at 180°=2400µs) so every step delivers 2+ full PWM cycles!
-let panStepMs = parseInt(localStorage.getItem("rov_pan_lstep_v4") || "45", 10);
-if (isNaN(panStepMs) || panStepMs < 18 || panStepMs > 250) panStepMs = 45;
-let panRightStepMs = parseInt(localStorage.getItem("rov_pan_rstep_v4") || "30", 10);
-if (isNaN(panRightStepMs) || panRightStepMs < 15 || panRightStepMs > 200) panRightStepMs = 30;
-let panRightPwmDeg = parseInt(localStorage.getItem("rov_pan_rpwm_v4") || "180", 10);
-if (isNaN(panRightPwmDeg) || panRightPwmDeg < 160 || panRightPwmDeg > 180) panRightPwmDeg = 180;
+// Pi-timed gentle micro-pulse (pw=1200 Left, pw=1800 Right via {action, duration}):
+// 24ms Left (0.024s) and 20ms Right (0.020s) timed directly on the Raspberry Pi CPU for ~10° movement!
+let panStepMs = parseInt(localStorage.getItem("rov_pan_lstep_v5") || "24", 10);
+if (isNaN(panStepMs) || panStepMs < 14 || panStepMs > 120) panStepMs = 24;
+let panRightStepMs = parseInt(localStorage.getItem("rov_pan_rstep_v5") || "20", 10);
+if (isNaN(panRightStepMs) || panRightStepMs < 12 || panRightStepMs > 100) panRightStepMs = 20;
 
 let tiltStepDeg = parseFloat(localStorage.getItem("rov_tilt_step_deg") || "1");
 if (isNaN(tiltStepDeg) || tiltStepDeg < 0.5 || tiltStepDeg > 15) tiltStepDeg = 1;
@@ -1368,7 +1221,6 @@ function checkStreamFrozen() {
     }
     if (sig === lastFrameSignature && sig.length > 0) {
       identicalFrameCount++;
-      // If 2 consecutive checks (3.6 seconds) have 100% identical sensor pixels, the MJPEG socket stalled
       if (identicalFrameCount >= 2) {
         identicalFrameCount = 0;
         connectStream();
@@ -1377,9 +1229,7 @@ function checkStreamFrozen() {
       lastFrameSignature = sig;
       identicalFrameCount = 0;
     }
-  } catch (e) {
-    // Cross-origin canvas taint fallback: rely on status heartbeat
-  }
+  } catch (e) {}
 }
 
 setInterval(checkStreamFrozen, 1800);
@@ -1399,7 +1249,7 @@ setInterval(() => {
           connectStream();
         }
         // Safety Watchdog: only force stop if no pan command has run in the last 1.5s
-        if (!panHoldInterval && !panStepInFlight && !ringSeekActive && (Date.now() - lastPanCommandTime > 1500) && d.pan !== undefined && (d.pan < 84 || d.pan > 96)) {
+        if (!panHoldInterval && !panStepInFlight && !panSliderSeekActive && (Date.now() - lastPanCommandTime > 1500) && d.pan !== undefined && (d.pan < 84 || d.pan > 96)) {
           forcePanStopImmediate();
         }
       }
@@ -1588,7 +1438,7 @@ function toggleInvertTilt() {
   setTimeout(hideIndicator, 700);
 }
 
-// ── Rotatable 0°–300° Ring (150° Fixed Top Reference) & Servo Sliders ───────
+// ── Slow 10° Step Pan Servo Control, On-Screen Servo Sliders & 300°/330° Lock ──
 function formatSignedDeg(d) {
   const v = +parseFloat(d).toFixed(1);
   return (v > 0 ? `+${v}°` : `${v}°`);
@@ -1598,131 +1448,43 @@ function getPanHalfLimit() {
   return panLimitDeg > 0 ? (panLimitDeg / 2) : 150;
 }
 
-function getRingMaxDeg() {
+function getPanMaxDeg() {
   return panLimitDeg > 0 ? panLimitDeg : 300;
 }
 
-function virtualToRingDeg(vDeg) {
-  const maxD = getRingMaxDeg();
+function virtualToSliderDeg(vDeg) {
+  const maxD = getPanMaxDeg();
   const halfD = maxD / 2;
   return Math.max(0, Math.min(maxD, Math.round(vDeg + halfD)));
 }
 
-function ringToVirtualDeg(rDeg) {
-  const maxD = getRingMaxDeg();
+function sliderToVirtualDeg(sDeg) {
+  const maxD = getPanMaxDeg();
   const halfD = maxD / 2;
-  const clamped = Math.max(0, Math.min(maxD, rDeg));
+  const clamped = Math.max(0, Math.min(maxD, sDeg));
   return +(clamped - halfD).toFixed(1);
 }
 
-// Convert compass angle (-150°..+150°, 0° at top) to SVG coordinates (cx=79, cy=79)
-function degToRingPoint(compassDeg, radius) {
-  const rad = (compassDeg * Math.PI) / 180;
-  return {
-    x: +(79 + radius * Math.sin(rad)).toFixed(1),
-    y: +(79 - radius * Math.cos(rad)).toFixed(1)
-  };
-}
-
-let lastRenderedMaxDeg = null;
-function renderRingTicks() {
-  const maxD = getRingMaxDeg();
-  if (lastRenderedMaxDeg === maxD) return;
-  lastRenderedMaxDeg = maxD;
+function updateMainPanSliderUI() {
+  const maxD = getPanMaxDeg();
   const halfD = maxD / 2;
-  const grp = document.getElementById("ring-ticks-group");
-  if (!grp) return;
-
-  let svgHtml = "";
-  for (let rDeg = 0; rDeg <= maxD; rDeg += 10) {
-    const compassDeg = rDeg - halfD;
-    const isMajor = (rDeg % 30 === 0 || rDeg === halfD);
-    const pInner = degToRingPoint(compassDeg, isMajor ? 46 : 50);
-    const pOuter = degToRingPoint(compassDeg, isMajor ? 62 : 59);
-    const strokeCol = (rDeg === halfD) ? "#00e5b5" : (isMajor ? "#e2e8f0" : "#64748b");
-    const strokeW = (rDeg === halfD) ? "2.4" : (isMajor ? "1.6" : "1.0");
-    svgHtml += `<line x1="${pInner.x}" y1="${pInner.y}" x2="${pOuter.x}" y2="${pOuter.y}" stroke="${strokeCol}" stroke-width="${strokeW}" />`;
-
-    if (isMajor) {
-      const pTxt = degToRingPoint(compassDeg, 71);
-      const txtCol = (rDeg === halfD) ? "#00e5b5" : "#cbd5e1";
-      svgHtml += `<text x="${pTxt.x}" y="${+(pTxt.y + 2.5).toFixed(1)}" fill="${txtCol}" font-size="7.2" font-weight="bold" text-anchor="middle">${rDeg}°</text>`;
-    }
-  }
-  grp.innerHTML = svgHtml;
-}
-
-function updateRingDialUI() {
-  const widget = document.getElementById("ring-dial-widget");
-  if (widget) widget.style.display = ringDialVisible ? "flex" : "none";
-
-  const topRingBtn = document.getElementById("btn-ring-top");
-  const topRingLbl = document.getElementById("lbl-ring-top");
-  const botRingBtn = document.getElementById("btn-ring-bottom");
-  if (topRingBtn) topRingBtn.classList.toggle("active", ringDialVisible);
-  if (topRingLbl) topRingLbl.innerText = ringDialVisible ? "Ring ON" : "Ring OFF";
-  if (botRingBtn) botRingBtn.classList.toggle("active", ringDialVisible);
-
-  renderRingTicks();
-
-  const maxD = getRingMaxDeg();
-  const halfD = maxD / 2;
-  const needleRingDeg = virtualToRingDeg(panTargetDeg);
-  const camRingDeg = virtualToRingDeg(panVirtualDeg);
-
-  // Rotate the Ring Wheel (#ring-wheel-group) so the selected degree rolls under the Fixed 150° Top Pointer!
-  const wheelRotDeg = -(needleRingDeg - halfD);
-  const wheelGrp = document.getElementById("ring-wheel-group");
-  if (wheelGrp) {
-    wheelGrp.setAttribute("transform", `rotate(${wheelRotDeg}, 79, 79)`);
-  }
-
-  const targTxt = document.getElementById("ring-target-txt");
-  const currTxt = document.getElementById("ring-curr-txt");
-  if (targTxt) targTxt.innerText = `${needleRingDeg}°`;
-  if (currTxt) currTxt.innerText = `Cam:${camRingDeg}°`;
-
-  // Sync Main-Screen Left/Right Pan Servo Slider (#main-pan-slider)
+  const targetSliderDeg = virtualToSliderDeg(panTargetDeg);
   const mainPanSl = document.getElementById("main-pan-slider");
   if (mainPanSl) {
     mainPanSl.max = maxD;
-    mainPanSl.value = needleRingDeg;
+    mainPanSl.value = targetSliderDeg;
   }
   const mainPanLbl = document.getElementById("main-pan-lbl");
   if (mainPanLbl) {
-    const diffFromHome = Math.round(needleRingDeg - halfD);
+    const diffFromHome = Math.round(targetSliderDeg - halfD);
     const dirTag = diffFromHome === 0 ? "Center" : (diffFromHome < 0 ? `${diffFromHome}° L` : `+${diffFromHome}° R`);
-    mainPanLbl.innerText = `${needleRingDeg}° (${dirTag})`;
+    mainPanLbl.innerText = `${targetSliderDeg}° (${dirTag})`;
   }
-
-  const activeArc = document.getElementById("ring-active-arc");
-  const lockedArc = document.getElementById("ring-locked-arc");
-  const pLeft = degToRingPoint(-halfD, 56);
-  const pRight = degToRingPoint(halfD, 56);
-  if (activeArc) {
-    activeArc.setAttribute("d", `M ${pLeft.x} ${pLeft.y} A 56 56 0 1 1 ${pRight.x} ${pRight.y}`);
-  }
-  if (lockedArc) {
-    if (panLimitDeg > 0) {
-      lockedArc.setAttribute("d", `M ${pLeft.x} ${pLeft.y} A 56 56 0 0 0 ${pRight.x} ${pRight.y}`);
-      lockedArc.style.display = "block";
-    } else {
-      lockedArc.style.display = "none";
-    }
-  }
-}
-
-function toggleRingDialWidget() {
-  ringDialVisible = !ringDialVisible;
-  localStorage.setItem("rov_ring_visible", ringDialVisible ? "1" : "0");
-  updateRingDialUI();
-  showIndicator(ringDialVisible ? "⭕ ROLLING RING SHOWN" : "⭕ ROLLING RING HIDDEN");
-  setTimeout(hideIndicator, 800);
 }
 
 function syncPrecisionUI() {
-  const maxD = getRingMaxDeg();
-  const camRingDeg = virtualToRingDeg(panVirtualDeg);
+  const maxD = getPanMaxDeg();
+  const camDeg = virtualToSliderDeg(panVirtualDeg);
   const lockTag = panLimitDeg > 0 ? ` | 🛡️0°–${panLimitDeg}°` : " | 🔓Free";
   const lbl = document.getElementById("drawer-step-val");
   if (lbl) lbl.innerText = `L:${panStepMs}ms | R:${panRightStepMs}ms${lockTag}`;
@@ -1734,8 +1496,8 @@ function syncPrecisionUI() {
   const panDegHud = document.getElementById("lbl-pan-deg");
   if (panDegHud) {
     panDegHud.innerText = panLimitDeg > 0
-      ? `${camRingDeg}° / ${maxD}° 🛡️Lock`
-      : `${camRingDeg}° (🔓360° Free)`;
+      ? `${camDeg}° / ${maxD}° 🛡️Lock`
+      : `${camDeg}° (🔓360° Free)`;
   }
 
   const is300 = (panLimitDeg === 300);
@@ -1802,9 +1564,9 @@ function syncPrecisionUI() {
 
   const hudHint = document.getElementById("hud-hint");
   if (hudHint) {
-    const modeTxt = panLimitDeg > 0 ? `🛡️ 0°–${panLimitDeg}° Ring Lock` : `🔓 360° Free`;
+    const modeTxt = panLimitDeg > 0 ? `🛡️ 0°–${panLimitDeg}° Lock` : `🔓 360° Free`;
     const touchTxt = touchSwipeLocked
-      ? `🔒 Touch OFF (Rolling Ring & Sliders Active)`
+      ? `🔒 Touch OFF (Servo Sliders Active)`
       : `👆 Touch: L➔L, R➔R, Up➔Down, Down➔Up`;
     hudHint.innerHTML = `${touchTxt} | ${modeTxt}`;
   }
@@ -1827,14 +1589,14 @@ function syncPrecisionUI() {
     }
   });
 
-  const isFine = (panStepMs <= 46 && tiltStepDeg <= 1.5);
+  const isFine = (panStepMs <= 26 && tiltStepDeg <= 1.5);
   precisionMode = isFine;
   const botBtn = document.getElementById("btn-fine-bottom");
   const botLbl = document.getElementById("lbl-fine-btn");
   if (botBtn) botBtn.classList.toggle("active", isFine);
   if (botLbl) botLbl.innerText = isFine ? `Fine ${tiltStepDeg}°` : `Norm ${tiltStepDeg}°`;
 
-  updateRingDialUI();
+  updateMainPanSliderUI();
 }
 
 function setPanLimitMode(deg) {
@@ -1850,11 +1612,10 @@ function setPanLimitMode(deg) {
     panTargetDeg = Math.max(-halfLim, Math.min(halfLim, panTargetDeg));
     localStorage.setItem("rov_pan_virtual_deg", String(panVirtualDeg));
   }
-  lastRenderedMaxDeg = null;
   syncPrecisionUI();
   updateLabels(90, undefined);
   if (panLimitDeg > 0) {
-    showIndicator(`🛡️ 0°–${panLimitDeg}° RING & SERVO LOCK ACTIVATED`);
+    showIndicator(`🛡️ 0°–${panLimitDeg}° SERVO LOCK ACTIVATED`);
   } else {
     showIndicator("🔓 SERVO LOCK OFF (FREE 360° ROTATION)");
   }
@@ -1865,48 +1626,39 @@ function togglePan330Lock() {
   setPanLimitMode(330);
 }
 
-function calibrateRingNeedleHere(ringDegVal) {
-  ringSeekActive = false;
+function zeroPanHeading() {
+  panSliderSeekActive = false;
   forcePanStopImmediate();
-  const vDeg = ringToVirtualDeg(ringDegVal);
-  panVirtualDeg = vDeg;
-  panTargetDeg = vDeg;
-  localStorage.setItem("rov_pan_virtual_deg", String(panVirtualDeg));
+  panVirtualDeg = 0;
+  panTargetDeg = 0;
+  localStorage.setItem("rov_pan_virtual_deg", "0");
   syncPrecisionUI();
   updateLabels(90, undefined);
-  showIndicator(`📌 RING CALIBRATED TO ${ringDegVal}° AT CURRENT POSITION!`);
+  showIndicator(`📌 CURRENT POSITION SET AS ${getPanMaxDeg() / 2}° CENTER!`);
   setTimeout(hideIndicator, 1000);
 }
 
-function zeroPanHeading() {
-  calibrateRingNeedleHere(getRingMaxDeg() / 2);
-}
-
-async function unwindPanToZero() {
-  commandRingDegree(getRingMaxDeg() / 2);
-}
-
 function onPanStepSizeChange(ms) {
-  panStepMs = Math.max(18, Math.min(200, parseInt(ms, 10) || 45));
-  localStorage.setItem("rov_pan_lstep_v4", String(panStepMs));
+  panStepMs = Math.max(14, Math.min(120, parseInt(ms, 10) || 24));
+  localStorage.setItem("rov_pan_lstep_v5", String(panStepMs));
   syncPrecisionUI();
 }
 
 function onPanRightStepChange(ms) {
-  panRightStepMs = Math.max(15, Math.min(160, parseInt(ms, 10) || 30));
-  localStorage.setItem("rov_pan_rstep_v4", String(panRightStepMs));
+  panRightStepMs = Math.max(12, Math.min(100, parseInt(ms, 10) || 20));
+  localStorage.setItem("rov_pan_rstep_v5", String(panRightStepMs));
   syncPrecisionUI();
-  showIndicator(`▶ RIGHT STEP CALIBRATION: ${panRightStepMs}ms`);
+  showIndicator(`▶ RIGHT STEP: ${panRightStepMs}ms`);
   setTimeout(hideIndicator, 800);
 }
 
-function setRightCalibration(ms, pwmDeg) {
-  panRightStepMs = Math.max(15, Math.min(160, parseInt(ms, 10) || 30));
-  panRightPwmDeg = Math.max(160, Math.min(180, parseInt(pwmDeg, 10) || 180));
-  localStorage.setItem("rov_pan_rstep_v4", String(panRightStepMs));
-  localStorage.setItem("rov_pan_rpwm_v4", String(panRightPwmDeg));
+function setBothPanSpeeds(leftMs, rightMs) {
+  panStepMs = Math.max(14, Math.min(120, parseInt(leftMs, 10) || 24));
+  panRightStepMs = Math.max(12, Math.min(100, parseInt(rightMs, 10) || 20));
+  localStorage.setItem("rov_pan_lstep_v5", String(panStepMs));
+  localStorage.setItem("rov_pan_rstep_v5", String(panRightStepMs));
   syncPrecisionUI();
-  showIndicator(`▶ RIGHT CALIBRATED: ${panRightStepMs}ms (${panRightPwmDeg}°)`);
+  showIndicator(`🔬 SERVO SPEED SET: L=${panStepMs}ms | R=${panRightStepMs}ms`);
   setTimeout(hideIndicator, 900);
 }
 
@@ -1920,14 +1672,14 @@ function toggleTouchSwipeLock() {
   syncPrecisionUI();
   showIndicator(
     touchSwipeLocked
-      ? "🔒 TOUCHSCREEN DEACTIVATED (ROLLING RING & SLIDERS ONLY)"
+      ? "🔒 TOUCHSCREEN DEACTIVATED (SLIDERS ONLY)"
       : "👆 TOUCHSCREEN ACTIVATED (L➔Left, R➔Right, Up➔Down, Down➔Up)"
   );
   setTimeout(hideIndicator, 1000);
 }
 
 function saveCurrentAsCenter() {
-  ringSeekActive = false;
+  panSliderSeekActive = false;
   centerTiltDeg = +parseFloat(lastTiltSent).toFixed(1);
   localStorage.setItem("rov_center_tilt", String(centerTiltDeg));
   panVirtualDeg = 0;
@@ -1936,7 +1688,7 @@ function saveCurrentAsCenter() {
   forcePanStopImmediate();
   syncPrecisionUI();
   updateLabels(90, centerTiltDeg);
-  showIndicator(`📌 SAVED CENTER: Tilt ${centerTiltDeg}° & Ring 150°!`);
+  showIndicator(`📌 SAVED CENTER: Tilt ${centerTiltDeg}° & Pan ${getPanMaxDeg() / 2}°!`);
   setTimeout(hideIndicator, 1000);
 }
 
@@ -1952,199 +1704,51 @@ function togglePrecisionMode() {
   if (precisionMode) {
     precisionMode = false;
     localStorage.setItem("rov_precision_mode", "0");
-    onPanStepSizeChange(60);
-    setRightCalibration(42, 180);
+    setBothPanSpeeds(32, 26);
     setTiltStepSize(2);
-    showIndicator("⚡ NORMAL MODE: 2° Tilt | L:60ms / R:42ms");
+    showIndicator("⚡ MEDIUM MODE: 2° Tilt | L:32ms / R:26ms");
   } else {
     precisionMode = true;
     localStorage.setItem("rov_precision_mode", "1");
-    onPanStepSizeChange(45);
-    setRightCalibration(30, 180);
+    setBothPanSpeeds(24, 20);
     setTiltStepSize(1);
-    showIndicator("🔬 FINE MODE: 1° Tilt | L:45ms / R:30ms Balanced");
+    showIndicator("🔬 FINE 10° STEP MODE: 1° Tilt | L:24ms / R:20ms");
   }
   setTimeout(hideIndicator, 1000);
 }
 
-// ── Rotatable 0°–300° Ring (150° Fixed Top) & On-Screen Pan Servo Slider ───
-const ringTouchArea = document.getElementById("ring-touch-area");
-let ringDragStartPointerAngle = 0;
-let ringDragStartTargetDeg = 150;
-let ringDragAccumDelta = 0;
-let ringDragHasMoved = false;
-
-function getPointerCompassAngle(clientX, clientY) {
-  const svg = document.getElementById("ring-svg");
-  const rect = svg.getBoundingClientRect();
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  return Math.atan2(clientX - cx, -(clientY - cy)) * (180 / Math.PI);
-}
-
-function normalizeAngleDelta(d) {
-  let a = d;
-  while (a > 180) a -= 360;
-  while (a < -180) a += 360;
-  return a;
-}
-
-// If user taps a specific degree mark on the rotated wheel, roll that tapped degree to the Fixed Top Pointer
-function tappedWheelDegree10(clientX, clientY) {
-  const maxD = getRingMaxDeg();
-  const curRingDeg = virtualToRingDeg(panTargetDeg);
-  const screenCompass = getPointerCompassAngle(clientX, clientY);
-  const rawRingDeg = curRingDeg + screenCompass;
-  const snapped10 = Math.round(rawRingDeg / 10) * 10;
-  return Math.max(0, Math.min(maxD, snapped10));
-}
-
-async function runRingSeekLoop() {
-  if (ringSeekActive) return;
-  ringSeekActive = true;
+// ── On-Screen Left/Right Pan Servo Slider (10° Slow Micro-Steps) ────────────
+async function runPanSliderSeekLoop() {
+  if (panSliderSeekActive) return;
+  panSliderSeekActive = true;
   let guardSteps = 0;
-  while (ringSeekActive && guardSteps < 60) {
+  while (panSliderSeekActive && guardSteps < 40) {
     const diff = panTargetDeg - panVirtualDeg;
-    if (Math.abs(diff) < 1.5) {
+    if (Math.abs(diff) < 2.0) {
       break;
     }
     if (!panStepInFlight) {
       const dir = diff > 0 ? 'right' : 'left';
-      // Move in 10° steps so rolling the ring 10° turns the servo 10°!
       const stepDegWanted = Math.min(10, Math.abs(diff));
-      // Guarantee 2+ full 50Hz PWM cycles (48ms+ Left, 34ms+ Right) so the physical servo turns on every 10° step
-      const msFor10Deg = (dir === 'left')
-        ? Math.max(48, Math.round(panStepMs * 1.15))
-        : Math.max(34, Math.round(panRightStepMs * 1.15));
-      const pulseMs = Math.max(24, Math.round((stepDegWanted / 10) * msFor10Deg));
+      const baseMs = (dir === 'left') ? panStepMs : panRightStepMs;
+      const pulseMs = Math.max(14, Math.round((stepDegWanted / 10) * baseMs));
       await triggerPanTimed(dir, pulseMs, true, stepDegWanted);
     }
     guardSteps++;
-    await new Promise(r => setTimeout(r, 90));
+    await new Promise(r => setTimeout(r, 140));
   }
-  if (ringSeekActive) {
-    ringSeekActive = false;
-    updateRingDialUI();
-    showIndicator(`⭕ RING SET AT ${virtualToRingDeg(panVirtualDeg)}° (150° Fixed Top)`);
-    setTimeout(hideIndicator, 800);
+  if (panSliderSeekActive) {
+    panSliderSeekActive = false;
+    updateMainPanSliderUI();
   }
-}
-
-function commandRingDegree(ringDeg) {
-  const maxD = getRingMaxDeg();
-  const clampedRing = Math.max(0, Math.min(maxD, Math.round(ringDeg / 10) * 10));
-  const targetV = ringToVirtualDeg(clampedRing);
-  const deltaDeg = Math.round(clampedRing - virtualToRingDeg(panVirtualDeg));
-  panTargetDeg = targetV;
-  updateRingDialUI();
-  if (deltaDeg !== 0) {
-    showIndicator(`⭕ ROLL RING ➔ ${clampedRing}° (${deltaDeg > 0 ? '+' : ''}${deltaDeg}° Servo Move)`);
-  }
-  runRingSeekLoop();
 }
 
 function onMainPanSliderInput(val) {
-  const deg = parseInt(val, 10);
-  if (!isNaN(deg)) {
-    commandRingDegree(deg);
-  }
-}
-
-function stepRingNeedle(delta10) {
-  const currentNeedle = virtualToRingDeg(panTargetDeg);
-  commandRingDegree(currentNeedle + delta10);
-}
-
-function commandRingAngle(compassDeg) {
-  commandRingDegree(compassDeg + getRingMaxDeg() / 2);
-}
-
-function onRingCenterTap() {
-  if (ringSeekActive) {
-    ringSeekActive = false;
-    panTargetDeg = panVirtualDeg;
-    forcePanStopImmediate();
-    updateRingDialUI();
-    showIndicator(`⏹ STOPPED AT ${virtualToRingDeg(panVirtualDeg)}°`);
-    setTimeout(hideIndicator, 700);
-  } else {
-    commandRingDegree(getRingMaxDeg() / 2);
-  }
-}
-
-if (ringTouchArea) {
-  ringTouchArea.addEventListener("touchstart", e => {
-    if (e.target.closest(".ring-center-info")) return;
-    e.stopPropagation();
-    e.preventDefault();
-    isDraggingRing = true;
-    ringDragHasMoved = false;
-    ringDragAccumDelta = 0;
-    const t = e.touches[0];
-    ringDragStartPointerAngle = getPointerCompassAngle(t.clientX, t.clientY);
-    ringDragStartTargetDeg = virtualToRingDeg(panTargetDeg);
-  }, {passive: false});
-
-  ringTouchArea.addEventListener("touchmove", e => {
-    if (!isDraggingRing) return;
-    e.stopPropagation();
-    e.preventDefault();
-    const t = e.touches[0];
-    const curAngle = getPointerCompassAngle(t.clientX, t.clientY);
-    const stepDelta = normalizeAngleDelta(curAngle - ringDragStartPointerAngle);
-    ringDragStartPointerAngle = curAngle;
-    ringDragAccumDelta += stepDelta;
-    if (Math.abs(ringDragAccumDelta) >= 4) {
-      ringDragHasMoved = true;
-    }
-    const maxD = getRingMaxDeg();
-    // Rolling ring with finger: dragging clockwise/right or counter-clockwise/left smoothly rolls target degree in 10° steps
-    const nextDeg = Math.max(0, Math.min(maxD, Math.round((ringDragStartTargetDeg + ringDragAccumDelta) / 10) * 10));
-    if (nextDeg !== virtualToRingDeg(panTargetDeg)) {
-      commandRingDegree(nextDeg);
-    }
-  }, {passive: false});
-
-  ringTouchArea.addEventListener("touchend", e => {
-    if (isDraggingRing && !ringDragHasMoved && e.changedTouches && e.changedTouches.length > 0) {
-      const t = e.changedTouches[0];
-      commandRingDegree(tappedWheelDegree10(t.clientX, t.clientY));
-    }
-    isDraggingRing = false;
-  });
-
-  ringTouchArea.addEventListener("mousedown", e => {
-    if (e.target.closest(".ring-center-info")) return;
-    e.stopPropagation();
-    isDraggingRing = true;
-    ringDragHasMoved = false;
-    ringDragAccumDelta = 0;
-    ringDragStartPointerAngle = getPointerCompassAngle(e.clientX, e.clientY);
-    ringDragStartTargetDeg = virtualToRingDeg(panTargetDeg);
-  });
-
-  window.addEventListener("mousemove", e => {
-    if (!isDraggingRing) return;
-    const curAngle = getPointerCompassAngle(e.clientX, e.clientY);
-    const stepDelta = normalizeAngleDelta(curAngle - ringDragStartPointerAngle);
-    ringDragStartPointerAngle = curAngle;
-    ringDragAccumDelta += stepDelta;
-    if (Math.abs(ringDragAccumDelta) >= 4) {
-      ringDragHasMoved = true;
-    }
-    const maxD = getRingMaxDeg();
-    const nextDeg = Math.max(0, Math.min(maxD, Math.round((ringDragStartTargetDeg + ringDragAccumDelta) / 10) * 10));
-    if (nextDeg !== virtualToRingDeg(panTargetDeg)) {
-      commandRingDegree(nextDeg);
-    }
-  });
-
-  window.addEventListener("mouseup", e => {
-    if (isDraggingRing && !ringDragHasMoved) {
-      commandRingDegree(tappedWheelDegree10(e.clientX, e.clientY));
-    }
-    isDraggingRing = false;
-  });
+  const maxD = getPanMaxDeg();
+  const sDeg = Math.max(0, Math.min(maxD, Math.round((parseInt(val, 10) || 0) / 10) * 10));
+  panTargetDeg = sliderToVirtualDeg(sDeg);
+  updateMainPanSliderUI();
+  runPanSliderSeekLoop();
 }
 
 // ── Touch Screen Hand Gesture Control (L➔Left, R➔Right, Up➔Down, Down➔Up) & Pinch Zoom ─
@@ -2176,12 +1780,12 @@ function handleSwipeMove(curX, curY) {
   const dy = curY - touchStartY;
 
   if (Math.abs(dx) > Math.abs(dy)) {
-    // Move hand LEFT (dx < 0) ➔ Move Camera LEFT ('left')
-    // Move hand RIGHT (dx > 0) ➔ Move Camera RIGHT ('right')
-    if (Math.abs(dx) >= 20 && !panSwipeCooldown) {
-      ringSeekActive = false;
+    // Move hand LEFT (dx < 0) ➔ Move Camera LEFT ('left') by 1 slow 10° step
+    // Move hand RIGHT (dx > 0) ➔ Move Camera RIGHT ('right') by 1 slow 10° step
+    if (Math.abs(dx) >= 26 && !panSwipeCooldown) {
+      panSliderSeekActive = false;
       panSwipeCooldown = true;
-      setTimeout(() => { panSwipeCooldown = false; }, Math.max(150, panStepMs + 95));
+      setTimeout(() => { panSwipeCooldown = false; }, Math.max(220, panStepMs + 180));
       touchStartX = curX;
       touchStartY = curY;
       const dir = dx < 0 ? 'left' : 'right';
@@ -2213,7 +1817,7 @@ function handleSwipeEnd() {
 }
 
 viewport.addEventListener('touchstart', e => {
-  if (e.target.closest('#ring-dial-widget') || e.target.closest('#zoom-focus-bar')) return;
+  if (e.target.closest('#zoom-focus-bar')) return;
   if (e.touches.length === 2) {
     isTouching = false;
     initialPinchDist = getPinchDistance(e.touches);
@@ -2226,7 +1830,7 @@ viewport.addEventListener('touchstart', e => {
 }, {passive: false});
 
 viewport.addEventListener('touchmove', e => {
-  if (e.target.closest('#ring-dial-widget') || e.target.closest('#zoom-focus-bar')) return;
+  if (e.target.closest('#zoom-focus-bar')) return;
   if (e.touches.length === 2 && initialPinchDist) {
     e.preventDefault();
     const dist = getPinchDistance(e.touches);
@@ -2244,19 +1848,19 @@ viewport.addEventListener('touchend', handleSwipeEnd);
 viewport.addEventListener('touchcancel', handleSwipeEnd);
 
 viewport.addEventListener('mousedown', e => {
-  if (e.target.closest('#ring-dial-widget') || e.target.closest('#zoom-focus-bar')) return;
+  if (e.target.closest('#zoom-focus-bar')) return;
   if (touchSwipeLocked) return;
   touchStartX = e.clientX;
   touchStartY = e.clientY;
   isTouching = true;
 });
 window.addEventListener('mousemove', e => {
-  if (touchSwipeLocked || !isTouching || isDraggingRing) return;
+  if (touchSwipeLocked || !isTouching) return;
   handleSwipeMove(e.clientX, e.clientY);
 });
 window.addEventListener('mouseup', handleSwipeEnd);
 
-// ── Servo API Calls (Full 50Hz PWM Cycles for Reliable Left/Right Pan + Tilt) ──
+// ── Servo API Calls (Pi-Timed Gentle {action, duration} Micro-Step Engine) ──
 function forcePanStopImmediate() {
   if (panStopBackupTimer) {
     clearTimeout(panStopBackupTimer);
@@ -2267,18 +1871,8 @@ function forcePanStopImmediate() {
   fetch(getApiUrl('/api/pan'), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({angle: 90})
+    body: JSON.stringify({action: 'stop'})
   }).catch(() => {});
-  panStopBackupTimer = setTimeout(() => {
-    if (!panStepInFlight && !ringSeekActive) {
-      fetch(getApiUrl('/api/pan'), {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({angle: 90})
-      }).catch(() => {});
-      updateLabels(90, undefined);
-    }
-  }, 65);
 }
 
 function postPan(data) {
@@ -2306,17 +1900,17 @@ function updateLabels(p, t) {
   if (p !== undefined) {
     let tag = (p >= 84 && p <= 96) ? 'STOPPED' : (p < 84 ? '◀ STEP L' : 'STEP R ▶');
     document.getElementById('lbl-pan').innerText = tag;
-    const camRingDeg = virtualToRingDeg(panVirtualDeg);
-    const maxD = getRingMaxDeg();
+    const camDeg = virtualToSliderDeg(panVirtualDeg);
+    const maxD = getPanMaxDeg();
     const drPan = document.getElementById('drawer-pan-val');
-    if (drPan) drPan.innerText = `${camRingDeg}° / ${maxD}° (${tag})`;
+    if (drPan) drPan.innerText = `${camDeg}° / ${maxD}° (${tag})`;
     const panDegHud = document.getElementById("lbl-pan-deg");
     if (panDegHud) {
       panDegHud.innerText = panLimitDeg > 0
-        ? `${camRingDeg}° / ${maxD}° 🛡️Lock`
-        : `${camRingDeg}° (🔓360° Free)`;
+        ? `${camDeg}° / ${maxD}° 🛡️Lock`
+        : `${camDeg}° (🔓360° Free)`;
     }
-    updateRingDialUI();
+    updateMainPanSliderUI();
     lastPanSent = p;
   }
   if (t !== undefined) {
@@ -2365,40 +1959,39 @@ function stopTiltHold() {
 
 let panStepInFlight = false;
 
-async function triggerPanTimed(dir, customMs, fromRingSeek, customDegDelta) {
+async function triggerPanTimed(dir, customMs, fromSliderSeek, customDegDelta) {
   if (panStepInFlight) return;
-  if (!fromRingSeek) {
-    ringSeekActive = false;
+  if (!fromSliderSeek) {
+    panSliderSeekActive = false;
   }
-  // Cancel any delayed backup stop timer so it can NEVER interrupt this new Pan step!
   if (panStopBackupTimer) {
     clearTimeout(panStopBackupTimer);
     panStopBackupTimer = null;
   }
 
   const defaultMs = (dir === 'left') ? panStepMs : panRightStepMs;
-  const degPerMs = (dir === 'left') ? 0.18 : 0.25;
   let stepMs = customMs || defaultMs;
-  let estDeg = customDegDelta ? +customDegDelta.toFixed(1) : Math.max(5.0, +(stepMs * degPerMs).toFixed(1));
+  // Each default step (24ms Left / 20ms Right) corresponds to ~10°
+  let estDeg = customDegDelta ? +customDegDelta.toFixed(1) : 10.0;
   const deltaSign = (dir === 'left') ? -1 : 1;
   const halfLim = getPanHalfLimit();
-  const maxD = getRingMaxDeg();
+  const maxD = getPanMaxDeg();
 
   // Enforce 0°..300° (or 0°..330°) Servo Movement Lock
   if (panLimitDeg > 0) {
     if (deltaSign < 0 && panVirtualDeg <= -halfLim) {
       if (panHoldInterval) { clearInterval(panHoldInterval); panHoldInterval = null; }
-      ringSeekActive = false;
+      panSliderSeekActive = false;
       forcePanStopImmediate();
-      showIndicator(`🛡️ 0° LEFT LIMIT REACHED! Tap [📌150°] or Move Right ▶`);
+      showIndicator(`🛡️ 0° LEFT LIMIT REACHED! Move Right ▶`);
       setTimeout(hideIndicator, 1000);
       return;
     }
     if (deltaSign > 0 && panVirtualDeg >= halfLim) {
       if (panHoldInterval) { clearInterval(panHoldInterval); panHoldInterval = null; }
-      ringSeekActive = false;
+      panSliderSeekActive = false;
       forcePanStopImmediate();
-      showIndicator(`🛡️ ${maxD}° RIGHT LIMIT REACHED! Tap [📌150°] or Move Left ◀`);
+      showIndicator(`🛡️ ${maxD}° RIGHT LIMIT REACHED! Move Left ◀`);
       setTimeout(hideIndicator, 1000);
       return;
     }
@@ -2407,7 +2000,7 @@ async function triggerPanTimed(dir, customMs, fromRingSeek, customDegDelta) {
       : (halfLim - panVirtualDeg);
     if (estDeg > remainingDeg) {
       estDeg = +remainingDeg.toFixed(1);
-      stepMs = Math.max(22, Math.round(estDeg / degPerMs));
+      stepMs = Math.max(14, Math.round((estDeg / 10) * defaultMs));
     }
   }
 
@@ -2418,56 +2011,41 @@ async function triggerPanTimed(dir, customMs, fromRingSeek, customDegDelta) {
     if (panLimitDeg > 0) {
       panVirtualDeg = Math.max(-halfLim, Math.min(halfLim, panVirtualDeg));
     }
-    if (!fromRingSeek) {
+    if (!fromSliderSeek) {
       panTargetDeg = panVirtualDeg;
     }
     localStorage.setItem("rov_pan_virtual_deg", String(panVirtualDeg));
 
     const effectiveDir = invertPan ? (dir === 'left' ? 'right' : 'left') : dir;
-    const targetAngle = (effectiveDir === 'left') ? 0 : panRightPwmDeg;
     const durSec = +(stepMs / 1000).toFixed(3);
-    const camRingDeg = virtualToRingDeg(panVirtualDeg);
+    const camDeg = virtualToSliderDeg(panVirtualDeg);
 
-    showIndicator(dir === 'left' ? `◀ LEFT (${camRingDeg}° / ${maxD}°)` : `RIGHT (${camRingDeg}° / ${maxD}°) ▶`);
-    updateLabels(targetAngle, undefined);
+    showIndicator(dir === 'left' ? `◀ LEFT 10° (${camDeg}° / ${maxD}°)` : `RIGHT 10° (${camDeg}° / ${maxD}°) ▶`);
+    updateLabels(effectiveDir === 'left' ? 40 : 140, undefined);
 
-    // 1. Send start request ({angle: 0} for Left, {angle: 180} for Right) with full 50Hz starting torque
+    // Send {action: 'left'|'right', duration: durSec} (NO 'angle' key!) so the Raspberry Pi's own
+    // threading.Timer(duration) uses gentle pw=1200/1800 and stops the servo locally after 20-24ms!
     try {
       const ctrl = new AbortController();
       const tId = setTimeout(() => ctrl.abort(), 700);
       await fetch(getApiUrl('/api/pan'), {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({angle: targetAngle, duration: durSec}),
+        body: JSON.stringify({action: effectiveDir, duration: durSec}),
         signal: ctrl.signal
       });
       clearTimeout(tId);
     } catch (e) {}
 
-    // 2. Hold for stepMs milliseconds (45ms Left / 30ms Right = 2+ full 50Hz PWM cycles)
-    await new Promise(r => setTimeout(r, stepMs));
-
-    // 3. Send clean stop request ({angle: 90})
-    lastPanCommandTime = Date.now();
-    try {
-      const ctrl2 = new AbortController();
-      const tId2 = setTimeout(() => ctrl2.abort(), 700);
-      await fetch(getApiUrl('/api/pan'), {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({angle: 90}),
-        signal: ctrl2.signal
-      });
-      clearTimeout(tId2);
-    } catch (e) {}
-
+    // Wait for the Pi's hardware timer (stepMs) + 45ms buffer to finish cleanly before unlocking
+    await new Promise(r => setTimeout(r, stepMs + 45));
     updateLabels(90, undefined);
   } finally {
     panStepInFlight = false;
     lastPanCommandTime = Date.now();
   }
 
-  if (!fromRingSeek) {
+  if (!fromSliderSeek) {
     setTimeout(hideIndicator, 250);
   }
   setTimeout(checkStreamFrozen, 650);
@@ -2475,14 +2053,14 @@ async function triggerPanTimed(dir, customMs, fromRingSeek, customDegDelta) {
 
 function startPanHold(dir, ev) {
   if (ev) ev.preventDefault();
-  ringSeekActive = false;
+  panSliderSeekActive = false;
   if (panHoldInterval) {
     clearInterval(panHoldInterval);
     panHoldInterval = null;
   }
   triggerPanTimed(dir);
   const baseMs = (dir === 'left') ? panStepMs : panRightStepMs;
-  const repeatInterval = Math.max(210, baseMs + 150);
+  const repeatInterval = Math.max(250, baseMs + 200);
   panHoldInterval = setInterval(() => {
     if (!panStepInFlight) {
       triggerPanTimed(dir);
@@ -2501,7 +2079,7 @@ function stopPanHold() {
 }
 
 function triggerPanStop() {
-  ringSeekActive = false;
+  panSliderSeekActive = false;
   if (panHoldInterval) {
     clearInterval(panHoldInterval);
     panHoldInterval = null;
@@ -2528,7 +2106,7 @@ function onPanSliderInput(val) {
   const dir = p < 90 ? 'left' : 'right';
   if (!panTimer) {
     triggerPanTimed(dir);
-    panTimer = setTimeout(() => { panTimer = null; }, Math.max(200, panStepMs + 140));
+    panTimer = setTimeout(() => { panTimer = null; }, Math.max(240, panStepMs + 190));
   }
 }
 
@@ -2551,14 +2129,14 @@ function onTiltSliderInput(val) {
 }
 
 function recenterAll() {
-  ringSeekActive = false;
+  panSliderSeekActive = false;
   stopPanHold();
   stopTiltHold();
   forcePanStopImmediate();
   updateLabels(90, centerTiltDeg);
   postTilt({angle: centerTiltDeg});
   setZoom(1.0);
-  showIndicator(`⨁ CENTERED (Tilt ${centerTiltDeg}° | Ring ${virtualToRingDeg(panVirtualDeg)}°)`);
+  showIndicator(`⨁ CENTERED (Tilt ${centerTiltDeg}° | Pan ${virtualToSliderDeg(panVirtualDeg)}°)`);
   setTimeout(hideIndicator, 900);
 }
 
