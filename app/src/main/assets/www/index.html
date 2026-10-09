@@ -556,6 +556,7 @@
     <div class="header-right">
       <button class="btn-top accent" onclick="autoDiscoverRov(true)">🔍 Auto-Find</button>
       <button class="btn-top" onclick="openIpModal()">🌐 <span id="btn-ip-lbl">192.168.150.131</span></button>
+      <button class="btn-top active" id="btn-touch-top" onclick="toggleTouchSwipeLock()" title="Activate or Deactivate Touchscreen Hand Control"><span id="ico-touch-top">👆</span> <span id="lbl-touch-top">Touch ON</span></button>
       <button class="btn-top active" id="btn-300-top" onclick="setPanLimitMode(300)" title="Activate/Deactivate 300° Servo Rotation Lock (±150°)">🛡️ <span id="lbl-300-top">300° Lock</span></button>
       <button class="btn-top" id="btn-330-top" onclick="setPanLimitMode(330)" title="Activate/Deactivate 330° Servo Rotation Lock (±165°)">🛡️ <span id="lbl-330-top">330° Lock</span></button>
       <button class="btn-top active" id="btn-fine-mode" onclick="togglePrecisionMode()" title="Toggle Ultra-Fine 1° / Micro-Pulse Precision Mode">🔬 <span id="btn-fine-lbl">Fine 1°</span></button>
@@ -575,7 +576,7 @@
     <div id="hud-indicator">SWIPE</div>
     <div id="rec-indicator">● REC <span id="rec-timer">00:00</span></div>
 
-    <!-- Dedicated Left Floating Autofocus, Zoom & Container Hanging Flip Controls -->
+    <!-- Dedicated Left Floating Autofocus, Zoom, Touch Toggle & Container Hanging Flip Controls -->
     <div id="zoom-focus-bar">
       <button class="zf-btn af-btn" onclick="triggerAutofocus()">
         <span>🎯</span>
@@ -584,6 +585,10 @@
       <button class="zf-btn" onclick="stepZoom(0.5)">🔍+</button>
       <div class="zf-pill" id="hud-zoom-pill" onclick="setZoom(1.0)">1.0x</div>
       <button class="zf-btn" onclick="stepZoom(-0.5)">🔍-</button>
+      <button class="zf-btn" id="hud-touch-btn" onclick="toggleTouchSwipeLock()" title="Activate/Deactivate Touchscreen Control" style="border-color:var(--accent); color:var(--accent);">
+        <span id="hud-touch-ico">👆</span>
+        <span id="hud-touch-lbl" style="font-size:8px;">ON</span>
+      </button>
       <button class="zf-btn" id="hud-rot-btn" onclick="cycleCameraRotation()" title="Rotate / Hanging Flip">
         <span>🔄</span>
         <span id="hud-rot-lbl" style="font-size:8px;">0°</span>
@@ -603,6 +608,10 @@
   <div id="bottom-bar">
     <!-- Camera & Focus/Zoom Action Buttons -->
     <div class="action-group">
+      <button class="btn-action active" id="btn-touch-bottom" onclick="toggleTouchSwipeLock()">
+        <span class="icon" id="ico-touch-btn">👆</span>
+        <span id="lbl-touch-btn">Touch ON</span>
+      </button>
       <button class="btn-action" id="btn-af-main" onclick="triggerAutofocus()">
         <span class="icon">🎯</span>
         <span>Focus</span>
@@ -1393,19 +1402,44 @@ function syncPrecisionUI() {
     drwFreeBtn.style.fontWeight = isFree ? "bold" : "";
   }
 
+  const isTouchActive = !touchSwipeLocked;
+  const topTouchBtn = document.getElementById("btn-touch-top");
+  const topTouchIco = document.getElementById("ico-touch-top");
+  const topTouchLbl = document.getElementById("lbl-touch-top");
+  if (topTouchBtn) topTouchBtn.classList.toggle("active", isTouchActive);
+  if (topTouchIco) topTouchIco.innerText = isTouchActive ? "👆" : "🔒";
+  if (topTouchLbl) topTouchLbl.innerText = isTouchActive ? "Touch ON" : "Touch OFF";
+
+  const botTouchBtn = document.getElementById("btn-touch-bottom");
+  const botTouchIco = document.getElementById("ico-touch-btn");
+  const botTouchLbl = document.getElementById("lbl-touch-btn");
+  if (botTouchBtn) botTouchBtn.classList.toggle("active", isTouchActive);
+  if (botTouchIco) botTouchIco.innerText = isTouchActive ? "👆" : "🔒";
+  if (botTouchLbl) botTouchLbl.innerText = isTouchActive ? "Touch ON" : "Touch OFF";
+
+  const hudTouchBtn = document.getElementById("hud-touch-btn");
+  const hudTouchIco = document.getElementById("hud-touch-ico");
+  const hudTouchLbl = document.getElementById("hud-touch-lbl");
+  if (hudTouchBtn) {
+    hudTouchBtn.style.borderColor = isTouchActive ? "var(--accent)" : "";
+    hudTouchBtn.style.color = isTouchActive ? "var(--accent)" : "";
+  }
+  if (hudTouchIco) hudTouchIco.innerText = isTouchActive ? "👆" : "🔒";
+  if (hudTouchLbl) hudTouchLbl.innerText = isTouchActive ? "ON" : "OFF";
+
   const lockBtn = document.getElementById("btn-touch-lock");
   if (lockBtn) {
-    lockBtn.innerText = touchSwipeLocked ? "🔒 Touch Gesture: LOCKED" : "👆 Touch Gesture: ON";
-    lockBtn.style.borderColor = !touchSwipeLocked ? "var(--accent)" : "";
-    lockBtn.style.color = !touchSwipeLocked ? "var(--accent)" : "";
-    lockBtn.style.fontWeight = !touchSwipeLocked ? "bold" : "";
+    lockBtn.innerText = touchSwipeLocked ? "🔒 Touch Gesture: OFF (Locked)" : "👆 Touch Gesture: ON (Active)";
+    lockBtn.style.borderColor = isTouchActive ? "var(--accent)" : "";
+    lockBtn.style.color = isTouchActive ? "var(--accent)" : "";
+    lockBtn.style.fontWeight = isTouchActive ? "bold" : "";
   }
 
   const hudHint = document.getElementById("hud-hint");
   if (hudHint) {
     const modeTxt = panLimitDeg > 0 ? `🛡️ ${panLimitDeg}° Lock ON (±${halfLim}°)` : `🔓 360° Free`;
     const touchTxt = touchSwipeLocked
-      ? `🔒 Touch Locked (D-Pad Only)`
+      ? `🔒 Touchscreen Control OFF (D-Pad Only)`
       : `👆 Touch Screen: L➔Left, R➔Right, Up➔Down, Down➔Up`;
     hudHint.innerHTML = `${touchTxt} | ${modeTxt}`;
   }
@@ -1513,9 +1547,17 @@ function onPanStepSizeChange(ms) {
 
 function toggleTouchSwipeLock() {
   touchSwipeLocked = !touchSwipeLocked;
+  if (touchSwipeLocked) {
+    isTouching = false;
+    forcePanStopImmediate();
+  }
   localStorage.setItem("rov_touch_gesture_lock", touchSwipeLocked ? "1" : "0");
   syncPrecisionUI();
-  showIndicator(touchSwipeLocked ? "🔒 TOUCH GESTURE LOCKED (D-PAD ONLY)" : "👆 TOUCH GESTURE ON (L➔L, R➔R, Up➔Down, Down➔Up)");
+  showIndicator(
+    touchSwipeLocked
+      ? "🔒 TOUCHSCREEN DEACTIVATED (D-PAD ONLY)"
+      : "👆 TOUCHSCREEN ACTIVATED (L➔Left, R➔Right, Up➔Down, Down➔Up)"
+  );
   setTimeout(hideIndicator, 1000);
 }
 
