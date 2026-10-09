@@ -158,13 +158,13 @@ def set_pan(deg_or_action, duration=None):
         if isinstance(deg_or_action, str):
             act = deg_or_action.lower()
             if act == "left":
-                current_pan = 75
-                pw = 1360  # Gentle pulse near center for modified SG90 360° servo
+                current_pan = 0
+                pw = 600   # Extreme 0° (600µs) so modified SG90 reverses even if pot is off-center
                 if duration is None:
                     duration = 0.040
             elif act == "right":
-                current_pan = 105
-                pw = 1640  # Gentle pulse near center for modified SG90 360° servo
+                current_pan = 180
+                pw = 2400  # Extreme 180° (2400µs) so modified SG90 reverses even if pot is off-center
                 if duration is None:
                     duration = 0.040
             else:
@@ -178,7 +178,7 @@ def set_pan(deg_or_action, duration=None):
                 current_pan = 90
                 stop_pwm(PAN_PIN)
                 return
-            pw = 1360 if deg < 90 else 1640
+            pw = 600 if deg < 90 else 2400
             if duration is None:
                 duration = 0.040
 
