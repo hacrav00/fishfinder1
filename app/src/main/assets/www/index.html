@@ -828,26 +828,26 @@
       <button class="btn-close" onclick="toggleSettingsDrawer()">✕</button>
     </div>
     <div class="drawer-grid">
-      <!-- 330° / 300° Servo Lock & Slow 20° Pan Pulse Calibration Card -->
+      <!-- 330° / 300° Servo Lock & 20° Pan Pulse Calibration Card -->
       <div class="slider-card">
         <div class="slider-header">
-          <span>330° / 300° Lock &amp; Slow 20° Pan Calibration</span>
-          <span id="drawer-step-val" class="slider-val">R:114° | L:64° | 42ms (20°)</span>
+          <span>330° / 300° Lock &amp; 20° Pan Calibration</span>
+          <span id="drawer-step-val" class="slider-val">R:180° | L:0° | 22ms (20°)</span>
         </div>
         <div style="display:flex; align-items:center; gap:6px; font-size:10px; color:#94a3b8;">
           <span style="min-width:65px;">▶ Right Angle:</span>
-          <input type="range" id="drawer-rstep-slider" min="98" max="140" step="1" value="114" oninput="onPanRightAngleChange(this.value)">
-          <span id="lbl-r-angle" style="min-width:28px; font-family:monospace; color:var(--accent);">114°</span>
+          <input type="range" id="drawer-rstep-slider" min="98" max="180" step="1" value="180" oninput="onPanRightAngleChange(this.value)">
+          <span id="lbl-r-angle" style="min-width:28px; font-family:monospace; color:var(--accent);">180°</span>
         </div>
         <div style="display:flex; align-items:center; gap:6px; font-size:10px; color:#94a3b8;">
           <span style="min-width:65px;">◀ Left Angle:</span>
-          <input type="range" id="drawer-step-slider" min="45" max="82" step="1" value="64" oninput="onPanLeftAngleChange(this.value)">
-          <span id="lbl-l-angle" style="min-width:28px; font-family:monospace; color:var(--accent);">64°</span>
+          <input type="range" id="drawer-step-slider" min="0" max="82" step="1" value="0" oninput="onPanLeftAngleChange(this.value)">
+          <span id="lbl-l-angle" style="min-width:28px; font-family:monospace; color:var(--accent);">0°</span>
         </div>
         <div style="display:flex; align-items:center; gap:6px; font-size:10px; color:#94a3b8;">
           <span style="min-width:65px;">⏱️ Step Pulse:</span>
-          <input type="range" id="drawer-pulse-slider" min="15" max="90" step="1" value="42" oninput="onPanPulseMsChange(this.value)">
-          <span id="lbl-pulse-ms" style="min-width:28px; font-family:monospace; color:var(--accent);">42ms</span>
+          <input type="range" id="drawer-pulse-slider" min="10" max="70" step="1" value="22" oninput="onPanPulseMsChange(this.value)">
+          <span id="lbl-pulse-ms" style="min-width:28px; font-family:monospace; color:var(--accent);">22ms</span>
         </div>
         <div class="preset-row">
           <span class="preset-btn" id="btn-330-drawer" onclick="setPanLimitMode(330)" style="border-color:#38bdf8; color:#38bdf8; font-weight:bold;">🛡️ 330° Lock (0°–330°)</span>
@@ -856,10 +856,10 @@
           <span class="preset-btn" onclick="zeroPanHeading()">📌 Set 150° Center Here</span>
         </div>
         <div class="preset-row" style="margin-top:4px;">
-          <span class="preset-btn" onclick="setPan20DegPreset(110, 68, 22)">🐌 10° Micro</span>
-          <span class="preset-btn" onclick="setPan20DegPreset(114, 64, 42)" style="color:var(--accent); font-weight:bold;">🔬 20° Step (Default)</span>
-          <span class="preset-btn" onclick="setPan20DegPreset(118, 60, 58)">⚡ 30° Step</span>
-          <span class="preset-btn" onclick="setPan20DegPreset(125, 52, 75)">🚀 45° Step</span>
+          <span class="preset-btn" onclick="setPan20DegPreset(180, 0, 12)">🐌 10° Micro (12ms)</span>
+          <span class="preset-btn" onclick="setPan20DegPreset(180, 0, 22)" style="color:var(--accent); font-weight:bold;">🔬 20° Step (Default 22ms)</span>
+          <span class="preset-btn" onclick="setPan20DegPreset(180, 0, 35)">⚡ 30° Step (35ms)</span>
+          <span class="preset-btn" onclick="setPan20DegPreset(180, 0, 50)">🚀 45° Step (50ms)</span>
           <span class="preset-btn" id="btn-touch-lock" onclick="toggleTouchSwipeLock()" style="border-color:var(--accent); color:var(--accent); font-weight:bold;">👆 Touch: ON</span>
         </div>
       </div>
@@ -1073,13 +1073,13 @@ let panTargetDeg = 0;
 let panSliderSeekActive = false;
 let panSliderCooldown = false;
 let precisionMode = localStorage.getItem("rov_precision_mode") !== "0";
-// Calibrated gentle speed angles for exact ~20° steps (114° Right / 64° Left, 42ms pulse)
-let panRightSlowAngle = parseInt(localStorage.getItem("rov_pan_r_angle_v8") || "114", 10);
-if (isNaN(panRightSlowAngle) || panRightSlowAngle < 98 || panRightSlowAngle > 140) panRightSlowAngle = 114;
-let panLeftSlowAngle = parseInt(localStorage.getItem("rov_pan_l_angle_v8") || "64", 10);
-if (isNaN(panLeftSlowAngle) || panLeftSlowAngle < 45 || panLeftSlowAngle > 82) panLeftSlowAngle = 64;
-let panPulse20Ms = parseInt(localStorage.getItem("rov_pan_pulse_v8") || "42", 10);
-if (isNaN(panPulse20Ms) || panPulse20Ms < 15 || panPulse20Ms > 90) panPulse20Ms = 42;
+// Full opposite torque angles for exact 20° step (180° Right / 0° Left, 22ms pulse)
+let panRightSlowAngle = parseInt(localStorage.getItem("rov_pan_r_angle_v9") || "180", 10);
+if (isNaN(panRightSlowAngle) || panRightSlowAngle < 98 || panRightSlowAngle > 180) panRightSlowAngle = 180;
+let panLeftSlowAngle = parseInt(localStorage.getItem("rov_pan_l_angle_v9") || "0", 10);
+if (isNaN(panLeftSlowAngle) || panLeftSlowAngle < 0 || panLeftSlowAngle > 82) panLeftSlowAngle = 0;
+let panPulse20Ms = parseInt(localStorage.getItem("rov_pan_pulse_v9") || "22", 10);
+if (isNaN(panPulse20Ms) || panPulse20Ms < 10 || panPulse20Ms > 90) panPulse20Ms = 22;
 let panPulse10Ms = panPulse20Ms; // alias for backwards compatibility
 
 let tiltStepDeg = parseFloat(localStorage.getItem("rov_tilt_step_deg") || "2");
@@ -1729,21 +1729,21 @@ function zeroPanHeading() {
 }
 
 function onPanRightAngleChange(val) {
-  panRightSlowAngle = Math.max(98, Math.min(140, parseInt(val, 10) || 114));
-  localStorage.setItem("rov_pan_r_angle_v8", String(panRightSlowAngle));
+  panRightSlowAngle = Math.max(98, Math.min(180, parseInt(val, 10) || 180));
+  localStorage.setItem("rov_pan_r_angle_v9", String(panRightSlowAngle));
   syncPrecisionUI();
 }
 
 function onPanLeftAngleChange(val) {
-  panLeftSlowAngle = Math.max(45, Math.min(82, parseInt(val, 10) || 64));
-  localStorage.setItem("rov_pan_l_angle_v8", String(panLeftSlowAngle));
+  panLeftSlowAngle = Math.max(0, Math.min(82, parseInt(val, 10) || 0));
+  localStorage.setItem("rov_pan_l_angle_v9", String(panLeftSlowAngle));
   syncPrecisionUI();
 }
 
 function onPanPulseMsChange(val) {
-  panPulse20Ms = Math.max(15, Math.min(90, parseInt(val, 10) || 42));
+  panPulse20Ms = Math.max(10, Math.min(90, parseInt(val, 10) || 22));
   panPulse10Ms = panPulse20Ms;
-  localStorage.setItem("rov_pan_pulse_v8", String(panPulse20Ms));
+  localStorage.setItem("rov_pan_pulse_v9", String(panPulse20Ms));
   syncPrecisionUI();
 }
 
@@ -1752,11 +1752,11 @@ function setPan20DegPreset(rAngle, lAngle, pulseMs) {
   panLeftSlowAngle = lAngle;
   panPulse20Ms = pulseMs;
   panPulse10Ms = pulseMs;
-  localStorage.setItem("rov_pan_r_angle_v8", String(panRightSlowAngle));
-  localStorage.setItem("rov_pan_l_angle_v8", String(panLeftSlowAngle));
-  localStorage.setItem("rov_pan_pulse_v8", String(panPulse20Ms));
+  localStorage.setItem("rov_pan_r_angle_v9", String(panRightSlowAngle));
+  localStorage.setItem("rov_pan_l_angle_v9", String(panLeftSlowAngle));
+  localStorage.setItem("rov_pan_pulse_v9", String(panPulse20Ms));
   syncPrecisionUI();
-  showIndicator(`🔬 20° PAN CALIBRATED: R=${rAngle}° | L=${lAngle}° | ${pulseMs}ms`);
+  showIndicator(`🎯 20° PAN CALIBRATED: R=${rAngle}° | L=${lAngle}° | ${pulseMs}ms`);
   setTimeout(hideIndicator, 900);
 }
 const setPan10DegPreset = setPan20DegPreset;
@@ -2012,14 +2012,14 @@ function forcePanStopImmediate() {
   fetch(getApiUrl('/api/pan'), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({angle: 90})
+    body: JSON.stringify({angle: 90, action: 'stop'})
   }).catch(() => {});
   panStopBackupTimer = setTimeout(() => {
     lastPanCommandTime = Date.now();
     fetch(getApiUrl('/api/pan'), {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({angle: 90})
+      body: JSON.stringify({angle: 90, action: 'stop'})
     }).catch(() => {});
     updateLabels(90, undefined);
   }, 90);
@@ -2220,7 +2220,7 @@ function triggerPan20Deg(dir, source = 'BUTTON') {
   lastPanCommandTime = Date.now();
 
   const effectiveDir = invertPan ? (dir === 'left' ? 'right' : 'left') : dir;
-  // Calibrated gentle speed angles (114° Right ~1740us, 64° Left ~1240us) for 20°
+  // Full opposite torque angles: 0° Left (600us CCW), 180° Right (2400us CW)
   const targetAngle = (effectiveDir === 'left') ? panLeftSlowAngle : panRightSlowAngle;
   const pulseMs = panPulse20Ms;
 
@@ -2248,32 +2248,36 @@ function triggerPan20Deg(dir, source = 'BUTTON') {
     source: source
   });
 
-  // 1. Send START request
+  // 1. Send START request (immediate non-blocking HTTP post)
   fetch(getApiUrl('/api/pan'), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({angle: targetAngle})
+    body: JSON.stringify({
+      angle: targetAngle,
+      action: effectiveDir,
+      duration: +(pulseMs / 1000).toFixed(3)
+    })
   }).catch(() => {});
 
-  // 2. Schedule STOP request after pulseMs without awaiting the roundtrip
+  // 2. Schedule STOP request after pulseMs without awaiting network roundtrip
   setTimeout(() => {
     fetch(getApiUrl('/api/pan'), {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({angle: 90})
+      body: JSON.stringify({angle: 90, action: 'stop'})
     }).catch(() => {});
 
-    // 3. Second confirmation stop 50ms later
+    // 3. Second confirmation stop 45ms later to guarantee zero creep
     setTimeout(() => {
       fetch(getApiUrl('/api/pan'), {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({angle: 90})
+        body: JSON.stringify({angle: 90, action: 'stop'})
       }).catch(() => {});
       pan20DegInFlight = false;
       updateLabels(90, undefined);
-      setTimeout(hideIndicator, 250);
-    }, 50);
+      setTimeout(hideIndicator, 200);
+    }, 45);
   }, pulseMs);
 }
 
