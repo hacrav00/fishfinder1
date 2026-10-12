@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
     <application
         android:name="androidx.multidex.MultiDexApplication"
@@ -17,6 +18,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.FishFinder"
         android:usesCleartextTraffic="true"
+        android:requestLegacyExternalStorage="true"
         android:hardwareAccelerated="true">
         
         <activity
