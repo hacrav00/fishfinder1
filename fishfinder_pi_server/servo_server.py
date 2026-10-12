@@ -50,8 +50,8 @@ tilt_sleep_timer = None
 
 def set_tilt(deg):
     """
-    Drives 180° positional servo to target angle, then sleeps after 0.7s
-    to eliminate jitter, buzzing, overheating, and undervoltage.
+    Drives MG90S 180° positional servo in 10° steps, then sleeps after 0.6s
+    to completely stop jittering, digital buzzing, and battery drain.
     """
     global current_tilt, tilt_sleep_timer
     with arm_lock:
@@ -59,71 +59,68 @@ def set_tilt(deg):
             tilt_sleep_timer.cancel()
             tilt_sleep_timer = None
 
-        deg = max(0, min(180, int(deg)))
-        current_tilt = deg
-        pw = deg_to_pw_tilt(deg)
+        raw = float(deg)
+        # Quantize to 10 degree steps to eliminate intermediate pulse jitter
+        clean_deg = int(round(raw / 10.0) * 10)
+        clean_deg = max(0, min(180, clean_deg))
+        current_tilt = clean_deg
+        pw = deg_to_pw_tilt(clean_deg)
         lgpio.tx_servo(h, TILT_PIN, pw, 50)
 
         def _sleep():
             stop_pwm(TILT_PIN)
 
-        tilt_sleep_timer = threading.Timer(0.7, _sleep)
+        tilt_sleep_timer = threading.Timer(0.6, _sleep)
         tilt_sleep_timer.daemon = True
         tilt_sleep_timer.start()
 
-def deg_to_pw_pan(deg):
-    """Maps 0..180 continuous servo speed/direction to 600..2400us."""
-    clamped = max(0.0, min(180.0, float(deg)))
-    return int(600 + (clamped / 180.0) * 1800)
-
-pan_timer = None
+pan_sleep_timer = None
 
 def set_pan(deg_or_action, duration=None, left_pw=600, right_pw=2400):
     """
-    GPIO 18: 360° Continuous Rotation Servo Motor:
-    - Left (CCW): 600us (angle 0) for maximum starting torque outside deadband
-    - Right (CW): 2400us (angle 180) for maximum starting torque outside deadband
-    - Stop (90 deg / 'stop'): Cuts PWM pulses completely via stop_pwm so motor never creeps!
-    - duration: Local Pi hardware timer (e.g. 0.022s) to guarantee exact 20° pulse cutoff.
+    GPIO 18: Pan Servo Controller (Capable of full 0°–180° positional rotation):
+    - When given an angle (0°–180°): Drives to target position in 10° steps, holds for 0.7s
+      so the motor smoothly completes transit, then auto-sleeps via stop_pwm to eliminate jitter/buzzing.
+    - When given an action ('left', 'right'): Steps by 10°, drives to target position, holds for 0.7s, auto-sleeps.
+    - Stop ('stop'): Cuts PWM pulses completely via stop_pwm.
     """
-    global current_pan, pan_timer
+    global current_pan, pan_sleep_timer
     with arm_lock:
-        if pan_timer:
-            pan_timer.cancel()
-            pan_timer = None
+        if pan_sleep_timer:
+            pan_sleep_timer.cancel()
+            pan_sleep_timer = None
 
         if isinstance(deg_or_action, str):
             act = deg_or_action.lower()
             if act == "left":
-                current_pan = 0
-                pw = max(500, min(1400, int(left_pw)))
+                target_deg = max(0, current_pan - 10)
+                current_pan = target_deg
+                pw = deg_to_pw_tilt(target_deg)
             elif act == "right":
-                current_pan = 180
-                pw = max(1600, min(2500, int(right_pw)))
-            else: # "stop", "center"
+                target_deg = min(180, current_pan + 10)
+                current_pan = target_deg
+                pw = deg_to_pw_tilt(target_deg)
+            elif act in ("center", "recenter"):
                 current_pan = 90
+                pw = deg_to_pw_tilt(90)
+            else: # "stop"
                 stop_pwm(PAN_PIN)
                 return
         else:
             deg = float(deg_or_action)
-            current_pan = deg
-            # Deadband around 90: Stop completely!
-            if 84 <= deg <= 96:
-                current_pan = 90
-                stop_pwm(PAN_PIN)
-                return
-            pw = deg_to_pw_pan(deg)
+            clean_deg = int(round(deg / 10.0) * 10)
+            clean_deg = max(0, min(180, clean_deg))
+            current_pan = clean_deg
+            pw = deg_to_pw_tilt(clean_deg)
 
         lgpio.tx_servo(h, PAN_PIN, pw, 50)
 
-        if duration and duration > 0:
-            def _auto_stop():
-                with arm_lock:
-                    current_pan = 90
-                    stop_pwm(PAN_PIN)
-            pan_timer = threading.Timer(duration, _auto_stop)
-            pan_timer.daemon = True
-            pan_timer.start()
+        def _sleep():
+            stop_pwm(PAN_PIN)
+
+        pan_sleep_timer = threading.Timer(0.7, _sleep)
+        pan_sleep_timer.daemon = True
+        pan_sleep_timer.start()
 
 # Initialize both motors to completely STOPPED and QUIET on startup
 stop_pwm(PAN_PIN)
@@ -187,48 +184,48 @@ HTML_PAGE = """<!DOCTYPE html>
     </div>
   </div>
   <div class="controls-card">
-    <div class="section-title">Pan & Tilt Servo Controls</div>
+    <div class="section-title">Pan & Tilt Servo Controls (0°–180° | 10° Steps)</div>
     <div class="dpad">
       <div></div>
-      <button class="btn" onclick="sendTiltAction('up')">▲ Up</button>
+      <button class="btn" onclick="sendTiltAction('up')">▲ 10° Up</button>
       <div></div>
-      <button class="btn" onclick="triggerPanTimed('left')">◀ Left</button>
-      <button class="btn btn-accent" onclick="recenter()">⨁ Center</button>
-      <button class="btn" onclick="triggerPanTimed('right')">Right ▶</button>
+      <button class="btn" onclick="sendPanAction('left')">◀ 10° Left</button>
+      <button class="btn btn-accent" onclick="recenter()">⨁ Center (90°)</button>
+      <button class="btn" onclick="sendPanAction('right')">10° Right ▶</button>
       <div></div>
-      <button class="btn" onclick="sendTiltAction('down')">▼ Down</button>
+      <button class="btn" onclick="sendTiltAction('down')">▼ 10° Down</button>
       <div></div>
     </div>
     
-    <!-- Pan Slider with Spring Return to Stop -->
+    <!-- Pan Positional Slider (0°–180° in 10° steps) -->
     <div class="slider-row">
       <div class="slider-lbl">
-        <span>Pan (360° Joystick Slider)</span>
-        <span id="pan-val" class="slider-val">STOPPED</span>
+        <span>Pan Position (0°–180° Full Rotation)</span>
+        <span id="pan-val" class="slider-val">90° (Center)</span>
       </div>
-      <input type="range" id="pan-slider" min="0" max="180" value="90" oninput="onPanInput(this.value)">
+      <input type="range" id="pan-slider" min="0" max="180" step="10" value="90" oninput="onPanInput(this.value)">
       <div class="hint-row">
-        <span onclick="triggerPanTimed('left')">◀ Nudge Left (0.5s)</span>
-        <span onclick="triggerPanStop()" style="color:#00d4aa; font-weight:bold;">⏹ STOP</span>
-        <span onclick="triggerPanTimed('right')">Nudge Right (0.5s) ▶</span>
+        <span onclick="setPanDirect(0)">0° Full Left</span>
+        <span onclick="setPanDirect(90)" style="color:#00d4aa; font-weight:bold;">90° Center</span>
+        <span onclick="setPanDirect(180)">180° Full Right</span>
       </div>
     </div>
 
-    <!-- Tilt 180 Positional Slider -->
+    <!-- Tilt Positional Slider (0°–180° in 10° steps) -->
     <div class="slider-row" style="margin-top: 6px;">
       <div class="slider-lbl">
-        <span>Tilt Angle (0°–180° Positional)</span>
+        <span>Tilt Angle (0°–180° Anti-Jitter)</span>
         <span id="tilt-val" class="slider-val">90° (Level)</span>
       </div>
-      <input type="range" id="tilt-slider" min="0" max="180" value="90" oninput="onTiltSlider(this.value)" onchange="onTiltSlider(this.value)">
+      <input type="range" id="tilt-slider" min="0" max="180" step="10" value="90" oninput="onTiltSlider(this.value)">
       <div class="hint-row">
-        <span onclick="setTiltDirect(0)">0° Down</span>
+        <span onclick="setTiltDirect(0)">0° Full Down</span>
         <span onclick="setTiltDirect(90)" style="color:#00d4aa; font-weight:bold;">90° Level</span>
-        <span onclick="setTiltDirect(180)">180° Up</span>
+        <span onclick="setTiltDirect(180)">180° Full Up</span>
       </div>
     </div>
 
-    <div class="status-bar">Idle Auto-Sleep active: Motors stay completely still and silent when not touched.</div>
+    <div class="status-bar">10° Anti-Jitter Steps & Idle Auto-Sleep active: Motors stay completely quiet and still when stationary.</div>
   </div>
 </div>
 <script>
@@ -255,84 +252,75 @@ function post(url, data) {
 
 function updateLabels(p, t) {
   if (p !== undefined) {
-    let tag = (p >= 85 && p <= 95) ? 'STOPPED' : (p < 85 ? '◀ SPINNING L' : 'SPINNING R ▶');
-    document.getElementById('pan-val').innerText = tag;
-    document.getElementById('pan-slider').value = p;
-    lastPanSent = p;
+    let cleanP = Math.round(p / 10) * 10;
+    let tag = cleanP == 90 ? ' (Center)' : (cleanP < 90 ? ' (' + (90 - cleanP) + '° Left)' : ' (' + (cleanP - 90) + '° Right)');
+    document.getElementById('pan-val').innerText = cleanP + '°' + tag;
+    document.getElementById('pan-slider').value = cleanP;
+    lastPanSent = cleanP;
   }
   if (t !== undefined) {
-    let tag = t == 90 ? ' (Level)' : (t < 90 ? ' (Down)' : ' (Up)');
-    document.getElementById('tilt-val').innerText = t + '°' + tag;
-    document.getElementById('tilt-slider').value = t;
-    lastTiltSent = t;
+    let cleanT = Math.round(t / 10) * 10;
+    let tag = cleanT == 90 ? ' (Level)' : (cleanT < 90 ? ' (Down)' : ' (Up)');
+    document.getElementById('tilt-val').innerText = cleanT + '°' + tag;
+    document.getElementById('tilt-slider').value = cleanT;
+    lastTiltSent = cleanT;
   }
   const curP = p !== undefined ? p : lastPanSent;
   const curT = t !== undefined ? t : lastTiltSent;
-  const pText = (curP >= 85 && curP <= 95) ? 'STOPPED' : (curP < 85 ? 'SPIN L' : 'SPIN R');
-  document.getElementById('pos-info').innerText = 'Pan: ' + pText + ' | Tilt: ' + curT + '°';
+  document.getElementById('pos-info').innerText = 'Pan: ' + curP + '° | Tilt: ' + curT + '°';
 }
 
-function sendTiltAction(act) { post('/api/tilt', {action: act}); }
-
-function triggerPanTimed(dir) {
-  post('/api/pan', {action: dir, duration: 0.025});
-  setTimeout(() => { updateLabels(90, undefined); }, 120);
+function sendPanAction(dir) {
+  const nextPan = dir === 'left' ? Math.max(0, lastPanSent - 10) : Math.min(180, lastPanSent + 10);
+  setPanDirect(nextPan);
 }
 
-function triggerPanStop() {
-  updateLabels(90, undefined);
-  post('/api/pan', {angle: 90});
+function sendTiltAction(act) {
+  const nextTilt = act === 'up' ? Math.min(180, lastTiltSent + 10) : Math.max(0, lastTiltSent - 10);
+  setTiltDirect(nextTilt);
+}
+
+function setPanDirect(val) {
+  const cleanP = Math.max(0, Math.min(180, Math.round(parseInt(val) / 10) * 10));
+  updateLabels(cleanP, undefined);
+  post('/api/pan', {angle: cleanP});
 }
 
 function setTiltDirect(val) {
-  updateLabels(undefined, parseInt(val));
-  post('/api/tilt', {angle: parseInt(val)});
+  const cleanT = Math.max(0, Math.min(180, Math.round(parseInt(val) / 10) * 10));
+  updateLabels(undefined, cleanT);
+  post('/api/tilt', {angle: cleanT});
 }
 
 function onPanInput(val) {
-  const p = parseInt(val);
+  const p = Math.round(parseInt(val) / 10) * 10;
   updateLabels(p, undefined);
   if (panTimer) clearTimeout(panTimer);
   panTimer = setTimeout(() => {
     post('/api/pan', {angle: p});
-  }, 35);
+  }, 40);
 }
-
-// Auto-Spring Return to STOP on finger/mouse release
-const panSlider = document.getElementById('pan-slider');
-function releasePanToStop() {
-  if (panSlider.value != 90) {
-    panSlider.value = 90;
-    updateLabels(90, undefined);
-    post('/api/pan', {angle: 90});
-  }
-}
-panSlider.addEventListener('mouseup', releasePanToStop);
-panSlider.addEventListener('touchend', releasePanToStop);
-panSlider.addEventListener('pointerup', releasePanToStop);
-panSlider.addEventListener('touchcancel', releasePanToStop);
 
 function onTiltSlider(val) {
-  const t = parseInt(val);
+  const t = Math.round(parseInt(val) / 10) * 10;
   updateLabels(undefined, t);
   if (tiltTimer) clearTimeout(tiltTimer);
   tiltTimer = setTimeout(() => {
     post('/api/tilt', {angle: t});
-  }, 35);
+  }, 40);
 }
 
 function recenter() {
-  updateLabels(90, 90);
-  post('/api/pan', {angle: 90});
-  post('/api/tilt', {angle: 90});
+  setPanDirect(90);
+  setTiltDirect(90);
 }
 
 window.addEventListener('keydown', e => {
   if (e.repeat) return;
   if (e.key === 'w' || e.key === 'ArrowUp') sendTiltAction('up');
   else if (e.key === 's' || e.key === 'ArrowDown') sendTiltAction('down');
-  else if (e.key === 'a' || e.key === 'ArrowLeft') triggerPanTimed('left');
-  else if (e.key === 'd' || e.key === 'ArrowRight') triggerPanTimed('right');
+  else if (e.key === 'a' || e.key === 'ArrowLeft') sendPanAction('left');
+  else if (e.key === 'd' || e.key === 'ArrowRight') sendPanAction('right');
   else if (e.key === ' ') recenter();
 });
 
@@ -359,40 +347,17 @@ function handleSwipeMove(curX, curY) {
   const dy = curY - touchStartY;
   
   if (Math.abs(dx) > Math.abs(dy)) {
-    // Horizontal swipe -> Pan Left / Right
-    if (dx < -25) {
-      if (currentSwipeAction !== 'left') {
-        currentSwipeAction = 'left';
-        showIndicator('◀ PAN LEFT');
-        post('/api/pan', {action: 'left'});
-        updateLabels(40, undefined);
-      }
-    } else if (dx > 25) {
-      if (currentSwipeAction !== 'right') {
-        currentSwipeAction = 'right';
-        showIndicator('PAN RIGHT ▶');
-        post('/api/pan', {action: 'right'});
-        updateLabels(140, undefined);
-      }
+    if (Math.abs(dx) > 28 && !currentSwipeAction) {
+      currentSwipeAction = dx < 0 ? 'left' : 'right';
+      sendPanAction(currentSwipeAction);
+      showIndicator(currentSwipeAction === 'left' ? '◀ 10° LEFT' : '10° RIGHT ▶');
     }
   } else {
-    // Vertical swipe -> Tilt Up / Down
-    if (dy < -20) {
-      if (!tiltThrottleTimer) {
-        tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 110);
-        const nextTilt = Math.min(180, lastTiltSent + 5);
-        showIndicator('▲ TILT UP (' + nextTilt + '°)');
-        updateLabels(undefined, nextTilt);
-        post('/api/tilt', {angle: nextTilt});
-      }
-    } else if (dy > 20) {
-      if (!tiltThrottleTimer) {
-        tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 110);
-        const nextTilt = Math.max(0, lastTiltSent - 5);
-        showIndicator('▼ TILT DOWN (' + nextTilt + '°)');
-        updateLabels(undefined, nextTilt);
-        post('/api/tilt', {angle: nextTilt});
-      }
+    if (Math.abs(dy) > 28 && !tiltThrottleTimer) {
+      tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 180);
+      const act = dy < 0 ? 'up' : 'down';
+      sendTiltAction(act);
+      showIndicator(act === 'up' ? '▲ 10° UP' : '▼ 10° DOWN');
     }
   }
 }
@@ -400,12 +365,8 @@ function handleSwipeMove(curX, curY) {
 function handleSwipeEnd() {
   if (isTouching) {
     isTouching = false;
-    hideIndicator();
-    if (currentSwipeAction === 'left' || currentSwipeAction === 'right') {
-      currentSwipeAction = null;
-      post('/api/pan', {action: 'stop'});
-      updateLabels(90, undefined);
-    }
+    currentSwipeAction = null;
+    setTimeout(hideIndicator, 350);
   }
 }
 
@@ -507,10 +468,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_header("Expires", "0")
                 self.end_headers()
                 while True:
-                    chunk = upstream.read(2048)
+                    chunk = upstream.read(65536)
                     if not chunk: break
                     self.wfile.write(chunk)
-                    self.wfile.flush()
             except Exception:
                 self.send_error(502, "Stream unavailable")
             return
@@ -531,16 +491,12 @@ class RequestHandler(BaseHTTPRequestHandler):
             left_pw = int(data.get("left_pw", 600))
             right_pw = int(data.get("right_pw", 2400))
 
-            if "action" in data and str(data["action"]).lower() in ("left", "right", "stop", "center"):
-                act = str(data["action"]).lower()
-                set_pan(act, duration=duration, left_pw=left_pw, right_pw=right_pw)
-            elif "angle" in data:
+            if "angle" in data:
                 raw_angle = float(data["angle"])
-                if raw_angle > 180:
-                    raw_angle = raw_angle / 2.0
                 set_pan(raw_angle, duration=duration)
             elif "action" in data:
-                set_pan(data["action"], duration=duration, left_pw=left_pw, right_pw=right_pw)
+                act = str(data["action"]).lower()
+                set_pan(act, duration=duration, left_pw=left_pw, right_pw=right_pw)
             else:
                 set_pan("stop")
 
