@@ -2,9 +2,9 @@
 """
 arm_server.py — FishFinder Robotic Arm & Video Hub
 ===================================================
-Jitter-Free Servo Controller with Idle Sleep:
-- Tilt (GPIO 19 / Pin 35): 180° Positional Servo with auto-sleep after positioning
-- Pan  (GPIO 18 / Pin 12): 360° Continuous Rotation with zero-pulse stop (no creep)
+Jitter-Free Dual Servo Controller with Idle Auto-Sleep:
+- Tilt (GPIO 19 / Pin 35): MG90S 180° Positional Metal Gear Servo with auto-sleep after positioning
+- Pan  (GPIO 18 / Pin 12): SG90 360° Continuous Rotation Servo with hardware pulse cutoff (no creep)
 """
 import os
 import sys
@@ -15,8 +15,8 @@ import urllib.request
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import lgpio
 
-PAN_PIN = 18    # GPIO 18, Physical Pin 12 (360° Continuous)
-TILT_PIN = 19   # GPIO 19, Physical Pin 35 (180° Positional)
+PAN_PIN = 18    # GPIO 18, Physical Pin 12 (SG90 360° Continuous Rotation)
+TILT_PIN = 19   # GPIO 19, Physical Pin 35 (MG90S 180° Positional Metal Gear)
 
 # Initialize native lgpio driver
 try:
@@ -46,10 +46,7 @@ def deg_to_pw_tilt(deg):
     clamped = max(0.0, min(180.0, float(deg)))
     return int(600 + (clamped / 180.0) * 1800)
 
-def deg_to_pw_pan(deg):
-    """Maps 0..180 to continuous servo speed/direction."""
-    clamped = max(0.0, min(180.0, float(deg)))
-    return int(600 + (clamped / 180.0) * 1800)
+tilt_sleep_timer = None
 
 def set_tilt(deg):
     """
@@ -74,12 +71,20 @@ def set_tilt(deg):
         tilt_sleep_timer.daemon = True
         tilt_sleep_timer.start()
 
-def set_pan(deg_or_action, duration=None):
+def deg_to_pw_pan(deg):
+    """Maps 0..180 continuous servo speed/direction to 600..2400us."""
+    clamped = max(0.0, min(180.0, float(deg)))
+    return int(600 + (clamped / 180.0) * 1800)
+
+pan_timer = None
+
+def set_pan(deg_or_action, duration=None, left_pw=600, right_pw=2400):
     """
-    360° Continuous Rotation Servo:
-    - 90 deg / "stop" = Completely cuts PWM so motor NEVER creeps or spins idle!
-    - < 85 deg / "left" = Spins Left
-    - > 95 deg / "right" = Spins Right
+    GPIO 18: 360° Continuous Rotation Servo Motor:
+    - Left (CCW): 600us (angle 0) for maximum starting torque outside deadband
+    - Right (CW): 2400us (angle 180) for maximum starting torque outside deadband
+    - Stop (90 deg / 'stop'): Cuts PWM pulses completely via stop_pwm so motor never creeps!
+    - duration: Local Pi hardware timer (e.g. 0.022s) to guarantee exact 20° pulse cutoff.
     """
     global current_pan, pan_timer
     with arm_lock:
@@ -91,18 +96,16 @@ def set_pan(deg_or_action, duration=None):
             act = deg_or_action.lower()
             if act == "left":
                 current_pan = 0
-                pw = 600
-                if duration is None: duration = 0.5
+                pw = max(500, min(1400, int(left_pw)))
             elif act == "right":
                 current_pan = 180
-                pw = 2400
-                if duration is None: duration = 0.5
+                pw = max(1600, min(2500, int(right_pw)))
             else: # "stop", "center"
                 current_pan = 90
                 stop_pwm(PAN_PIN)
                 return
         else:
-            deg = max(0, min(180, int(deg_or_action)))
+            deg = float(deg_or_action)
             current_pan = deg
             # Deadband around 90: Stop completely!
             if 84 <= deg <= 96:
@@ -115,7 +118,9 @@ def set_pan(deg_or_action, duration=None):
 
         if duration and duration > 0:
             def _auto_stop():
-                set_pan(90)
+                with arm_lock:
+                    current_pan = 90
+                    stop_pwm(PAN_PIN)
             pan_timer = threading.Timer(duration, _auto_stop)
             pan_timer.daemon = True
             pan_timer.start()
@@ -270,8 +275,8 @@ function updateLabels(p, t) {
 function sendTiltAction(act) { post('/api/tilt', {action: act}); }
 
 function triggerPanTimed(dir) {
-  post('/api/pan', {action: dir, duration: 0.5});
-  setTimeout(() => { updateLabels(90, undefined); }, 550);
+  post('/api/pan', {action: dir, duration: 0.025});
+  setTimeout(() => { updateLabels(90, undefined); }, 120);
 }
 
 function triggerPanStop() {
@@ -523,13 +528,21 @@ class RequestHandler(BaseHTTPRequestHandler):
         if self.path == "/api/pan":
             dur = float(data.get("duration", 0))
             duration = dur if dur > 0 else None
-            if "angle" in data:
+            left_pw = int(data.get("left_pw", 600))
+            right_pw = int(data.get("right_pw", 2400))
+
+            if "action" in data and str(data["action"]).lower() in ("left", "right", "stop", "center"):
+                act = str(data["action"]).lower()
+                set_pan(act, duration=duration, left_pw=left_pw, right_pw=right_pw)
+            elif "angle" in data:
                 raw_angle = float(data["angle"])
                 if raw_angle > 180:
                     raw_angle = raw_angle / 2.0
                 set_pan(raw_angle, duration=duration)
             elif "action" in data:
-                set_pan(data["action"], duration=duration)
+                set_pan(data["action"], duration=duration, left_pw=left_pw, right_pw=right_pw)
+            else:
+                set_pan("stop")
 
             self.send_response(200)
             self._send_cors()
