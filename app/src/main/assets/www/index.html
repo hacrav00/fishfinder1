@@ -711,7 +711,7 @@
 
   <!-- Live Camera Viewport -->
   <div id="viewport">
-    <img id="stream-img" src="" alt="Searching for ROV Camera on Router...">
+    <img id="stream-img" src="" alt="Searching for ROV Camera on Router..." crossorigin="anonymous">
     <canvas id="capture-canvas"></canvas>
 
     <!-- Autofocus Reticle & Gesture Indicator -->
@@ -2414,6 +2414,35 @@ function drawOrientedFrame(ctx, w, h) {
   ctx.restore();
 }
 
+function saveMediaPayload(dataUrl, filename, mimeType, onSuccess) {
+  if (window.AndroidBridge && window.AndroidBridge.saveMediaBase64) {
+    try {
+      window.AndroidBridge.saveMediaBase64(dataUrl, filename, mimeType);
+      showIndicator(mimeType.startsWith('image') ? '📸 PHOTO SAVED TO GALLERY' : '🎥 VIDEO SAVED TO GALLERY');
+      setTimeout(hideIndicator, 1200);
+      if (onSuccess) onSuccess();
+      return;
+    } catch (e) {
+      console.warn("AndroidBridge save failed", e);
+    }
+  }
+  // Browser fallback (PC / Chrome)
+  try {
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showIndicator(mimeType.startsWith('image') ? '📸 PHOTO DOWNLOADED' : '💾 VIDEO DOWNLOADED');
+    setTimeout(hideIndicator, 1200);
+    if (onSuccess) onSuccess();
+  } catch (err) {
+    showIndicator('❌ SAVE FAILED');
+    setTimeout(hideIndicator, 1000);
+  }
+}
+
 function takeSnapshot() {
   try {
     const canvas = document.getElementById("capture-canvas");
@@ -2425,18 +2454,48 @@ function takeSnapshot() {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filename = `FishFinder_Photo_${timestamp}.jpg`;
 
-    canvas.toBlob(blob => {
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      showIndicator('📸 PHOTO SAVED');
-      setTimeout(hideIndicator, 1000);
-    }, 'image/jpeg', 0.95);
+    let dataUrl = null;
+    try {
+      dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    } catch (corsErr) {
+      console.warn("Canvas tainted, using fallback snapshot endpoint", corsErr);
+    }
+
+    if (dataUrl && dataUrl.length > 100) {
+      saveMediaPayload(dataUrl, filename, 'image/jpeg');
+    } else {
+      // Fallback: Fetch direct JPEG snapshot from server
+      showIndicator('📸 CAPTURING...');
+      fetch(`http://${hostIp}:8080/snapshot?t=${Date.now()}`)
+        .then(r => {
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.blob();
+        })
+        .then(blob => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            saveMediaPayload(reader.result, filename, 'image/jpeg');
+          };
+          reader.readAsDataURL(blob);
+        })
+        .catch(e => {
+          fetch(`http://${hostIp}:8000/snapshot?t=${Date.now()}`)
+            .then(r => r.blob())
+            .then(blob => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                saveMediaPayload(reader.result, filename, 'image/jpeg');
+              };
+              reader.readAsDataURL(blob);
+            })
+            .catch(err2 => {
+              showIndicator('📸 SNAPSHOT FAILED');
+              setTimeout(hideIndicator, 1000);
+            });
+        });
+    }
   } catch (err) {
-    showIndicator('📸 CAPTURED');
+    showIndicator('📸 SNAPSHOT ERROR');
     setTimeout(hideIndicator, 800);
   }
 }
@@ -2454,8 +2513,20 @@ function startRecording() {
     const ctx = canvas.getContext("2d");
     const stream = canvas.captureStream(25);
     recordedChunks = [];
-    mediaRecorder = new MediaRecorder(stream, {mimeType: 'video/webm;codecs=vp8'});
-    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+
+    let recMime = 'video/webm';
+    if (typeof MediaRecorder !== 'undefined') {
+      if (MediaRecorder.isTypeSupported('video/mp4;codecs=h264') || MediaRecorder.isTypeSupported('video/mp4')) {
+        recMime = 'video/mp4';
+      } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+        recMime = 'video/webm;codecs=vp8';
+      } else if (MediaRecorder.isTypeSupported('video/webm')) {
+        recMime = 'video/webm';
+      }
+    }
+
+    mediaRecorder = new MediaRecorder(stream, { mimeType: recMime });
+    mediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
     mediaRecorder.onstop = saveRecordedVideo;
     mediaRecorder.start(1000);
 
@@ -2480,7 +2551,7 @@ function startRecording() {
     showIndicator('● RECORDING STARTED');
     setTimeout(hideIndicator, 1000);
   } catch (err) {
-    showIndicator('● REC ACTIVE');
+    showIndicator('● REC ERROR');
     setTimeout(hideIndicator, 800);
   }
 }
@@ -2496,16 +2567,53 @@ function stopRecording() {
 }
 
 function saveRecordedVideo() {
-  const blob = new Blob(recordedChunks, {type: 'video/webm'});
+  if (!recordedChunks || recordedChunks.length === 0) {
+    showIndicator('⚠️ NO VIDEO DATA');
+    setTimeout(hideIndicator, 1000);
+    return;
+  }
+  const mimeType = (mediaRecorder && mediaRecorder.mimeType) ? mediaRecorder.mimeType : 'video/webm';
+  const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `FishFinder_Video_${timestamp}.webm`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  showIndicator('💾 VIDEO SAVED');
-  setTimeout(hideIndicator, 1200);
+  const filename = `FishFinder_Video_${timestamp}.${ext}`;
+  const blob = new Blob(recordedChunks, {type: mimeType});
+
+  showIndicator('💾 SAVING TO GALLERY...');
+
+  const reader = new FileReader();
+  reader.onloadend = function() {
+    const dataUrl = reader.result;
+    if (window.AndroidBridge) {
+      if (window.AndroidBridge.initMediaTransfer) {
+        // Chunked transfer for maximum reliability
+        const base64Content = dataUrl.split(',')[1] || '';
+        const CHUNK_SIZE = 256 * 1024;
+        window.AndroidBridge.initMediaTransfer(filename, mimeType);
+        for (let i = 0; i < base64Content.length; i += CHUNK_SIZE) {
+          window.AndroidBridge.appendMediaChunk(base64Content.substring(i, Math.min(i + CHUNK_SIZE, base64Content.length)));
+        }
+        window.AndroidBridge.finishMediaTransfer();
+        showIndicator('🎥 VIDEO SAVED TO GALLERY');
+        setTimeout(hideIndicator, 1500);
+        return;
+      } else if (window.AndroidBridge.saveMediaBase64) {
+        window.AndroidBridge.saveMediaBase64(dataUrl, filename, mimeType);
+        showIndicator('🎥 VIDEO SAVED TO GALLERY');
+        setTimeout(hideIndicator, 1500);
+        return;
+      }
+    }
+    // Browser fallback
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showIndicator('💾 VIDEO DOWNLOADED');
+    setTimeout(hideIndicator, 1500);
+  };
+  reader.readAsDataURL(blob);
 }
 
 // ── Drawer & Modal Toggles ─────────────────────────────────────────────────
