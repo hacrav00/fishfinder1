@@ -794,8 +794,8 @@
       <!-- Left / Right 360° Pan Jog Slider (Photo Style with Centered Green Dot) & 20° Buttons -->
       <div class="servo-slider-row">
         <div class="servo-slider-head">
-          <span>◀ LEFT / RIGHT 360° (20° BUTTONS OR SLIDE GREEN DOT) ▶</span>
-          <span class="servo-slider-val" id="main-pan-lbl">STOPPED (150°)</span>
+          <span>◀ LEFT / RIGHT (SG90 360° | 20° BUTTONS / JOG DOT) ▶</span>
+          <span class="servo-slider-val" id="main-pan-lbl">STOPPED (0° CENTER)</span>
         </div>
         <div class="servo-slider-track">
           <button class="btn-10deg" onclick="triggerPan20Deg('left')" title="Step Left 20°">◀ 20°</button>
@@ -806,10 +806,10 @@
           <button class="btn-10deg" onclick="triggerPan20Deg('right')" title="Step Right 20°">20° ▶</button>
         </div>
       </div>
-      <!-- Down / Up Tilt Servo Slider (0°–180°, No 10° restriction) & Step Buttons -->
+      <!-- Down / Up Tilt Servo (MG90S 180° Positional Metal Gear Servo, Smooth Slider & Step Buttons) -->
       <div class="servo-slider-row">
         <div class="servo-slider-head">
-          <span>▼ DOWN / UP (SMOOTH SLIDER &amp; STEP BUTTONS) ▲</span>
+          <span>▼ DOWN / UP (MG90S 180° SMOOTH SLIDER) ▲</span>
           <span class="servo-slider-val" id="main-tilt-lbl">92° (Center)</span>
         </div>
         <div class="servo-slider-track">
@@ -824,15 +824,15 @@
   <!-- Hidden Controls & Sliders Slide-up Drawer -->
   <div id="settings-drawer">
     <div class="drawer-header">
-      <div class="drawer-title">🎛️ Hidden Controls: 330° Lock, 20° Pan Speed, Sliders, D-Pad &amp; Log</div>
+      <div class="drawer-title">🎛️ Hidden Controls: SG90 360° &amp; MG90S 180°, 330° Lock, Sliders, D-Pad &amp; Log</div>
       <button class="btn-close" onclick="toggleSettingsDrawer()">✕</button>
     </div>
     <div class="drawer-grid">
       <!-- 330° / 300° Servo Lock & 20° Pan Pulse Calibration Card -->
       <div class="slider-card">
         <div class="slider-header">
-          <span>330° / 300° Lock &amp; 20° Pan Calibration</span>
-          <span id="drawer-step-val" class="slider-val">R:180° | L:0° | 22ms (20°)</span>
+          <span>SG90 360° &amp; MG90S 180° Calibration</span>
+          <span id="drawer-step-val" class="slider-val">R:180° | L:0° | 28ms (20°)</span>
         </div>
         <div style="display:flex; align-items:center; gap:6px; font-size:10px; color:#94a3b8;">
           <span style="min-width:65px;">▶ Right Angle:</span>
@@ -846,8 +846,8 @@
         </div>
         <div style="display:flex; align-items:center; gap:6px; font-size:10px; color:#94a3b8;">
           <span style="min-width:65px;">⏱️ Step Pulse:</span>
-          <input type="range" id="drawer-pulse-slider" min="10" max="70" step="1" value="22" oninput="onPanPulseMsChange(this.value)">
-          <span id="lbl-pulse-ms" style="min-width:28px; font-family:monospace; color:var(--accent);">22ms</span>
+          <input type="range" id="drawer-pulse-slider" min="10" max="70" step="1" value="28" oninput="onPanPulseMsChange(this.value)">
+          <span id="lbl-pulse-ms" style="min-width:28px; font-family:monospace; color:var(--accent);">28ms</span>
         </div>
         <div class="preset-row">
           <span class="preset-btn" id="btn-330-drawer" onclick="setPanLimitMode(330)" style="border-color:#38bdf8; color:#38bdf8; font-weight:bold;">🛡️ 330° Lock (0°–330°)</span>
@@ -856,10 +856,10 @@
           <span class="preset-btn" onclick="zeroPanHeading()">📌 Set 150° Center Here</span>
         </div>
         <div class="preset-row" style="margin-top:4px;">
-          <span class="preset-btn" onclick="setPan20DegPreset(180, 0, 12)">🐌 10° Micro (12ms)</span>
-          <span class="preset-btn" onclick="setPan20DegPreset(180, 0, 22)" style="color:var(--accent); font-weight:bold;">🔬 20° Step (Default 22ms)</span>
-          <span class="preset-btn" onclick="setPan20DegPreset(180, 0, 35)">⚡ 30° Step (35ms)</span>
-          <span class="preset-btn" onclick="setPan20DegPreset(180, 0, 50)">🚀 45° Step (50ms)</span>
+          <span class="preset-btn" onclick="setPan20DegPreset(180, 0, 14)">🐌 10° Micro (14ms)</span>
+          <span class="preset-btn" onclick="setPan20DegPreset(180, 0, 28)" style="color:var(--accent); font-weight:bold;">🔬 20° Step (Default 28ms)</span>
+          <span class="preset-btn" onclick="setPan20DegPreset(180, 0, 42)">⚡ 30° Step (42ms)</span>
+          <span class="preset-btn" onclick="setPan20DegPreset(180, 0, 60)">🚀 45° Step (60ms)</span>
           <span class="preset-btn" id="btn-touch-lock" onclick="toggleTouchSwipeLock()" style="border-color:var(--accent); color:var(--accent); font-weight:bold;">👆 Touch: ON</span>
         </div>
       </div>
@@ -1063,25 +1063,31 @@ let recordedChunks = [];
 let recTimerInterval = null;
 let recSeconds = 0;
 
-// 300° / 330° Movement Lock, Slow 10° Step Calibration & Servo Sliders State
+// 300° / 330° Movement Lock, 20° Step Calibration & Servo Sliders State
 let panLimitDeg = parseInt(localStorage.getItem("rov_pan_limit_deg") || "300", 10);
 if (panLimitDeg !== 300 && panLimitDeg !== 330 && panLimitDeg !== 0) panLimitDeg = 300;
-// Start at 0 (150° center on the 0°–300° slider) on app launch
-let panVirtualDeg = 0;
-localStorage.setItem("rov_pan_virtual_deg", "0");
-let panTargetDeg = 0;
+
+// Left / Right: SG90 360° Continuous Rotation Servo Motor (GPIO 18)
+// Relative 20° Stepping with Hardware Pulse Cutoff & Virtual Angle Tracking
+let panVirtualDeg = parseFloat(localStorage.getItem("rov_pan_virtual_deg") || "0");
+if (isNaN(panVirtualDeg)) panVirtualDeg = 0;
+let panTargetDeg = panVirtualDeg;
+let panStepDeg = parseInt(localStorage.getItem("rov_pan_step_deg") || "20", 10);
+if (isNaN(panStepDeg) || panStepDeg < 1 || panStepDeg > 45) panStepDeg = 20;
+let panRightAngle = parseInt(localStorage.getItem("rov_pan_r_angle") || "180", 10);
+if (isNaN(panRightAngle) || panRightAngle < 98 || panRightAngle > 180) panRightAngle = 180;
+let panLeftAngle = parseInt(localStorage.getItem("rov_pan_l_angle") || "0", 10);
+if (isNaN(panLeftAngle) || panLeftAngle < 0 || panLeftAngle > 82) panLeftAngle = 0;
+let panPulseMs = parseInt(localStorage.getItem("rov_pan_pulse_ms") || "28", 10);
+if (isNaN(panPulseMs) || panPulseMs < 8 || panPulseMs > 100) panPulseMs = 28;
+let pan20DegInFlight = false;
+let currentPan = 90; // Pulse indicator (90 = STOPPED)
 let panSliderSeekActive = false;
 let panSliderCooldown = false;
-let precisionMode = localStorage.getItem("rov_precision_mode") !== "0";
-// Full opposite torque angles for exact 20° step (180° Right / 0° Left, 22ms pulse)
-let panRightSlowAngle = parseInt(localStorage.getItem("rov_pan_r_angle_v9") || "180", 10);
-if (isNaN(panRightSlowAngle) || panRightSlowAngle < 98 || panRightSlowAngle > 180) panRightSlowAngle = 180;
-let panLeftSlowAngle = parseInt(localStorage.getItem("rov_pan_l_angle_v9") || "0", 10);
-if (isNaN(panLeftSlowAngle) || panLeftSlowAngle < 0 || panLeftSlowAngle > 82) panLeftSlowAngle = 0;
-let panPulse20Ms = parseInt(localStorage.getItem("rov_pan_pulse_v9") || "22", 10);
-if (isNaN(panPulse20Ms) || panPulse20Ms < 10 || panPulse20Ms > 90) panPulse20Ms = 22;
-let panPulse10Ms = panPulse20Ms; // alias for backwards compatibility
+let panIndicatorTimer = null;
 
+// Down / Up: MG90S 180° Positional Metal Gear Micro Servo (GPIO 19)
+// Absolute Angular Positioning (0°–180°, Smooth Slider, Center 92°)
 let tiltStepDeg = parseFloat(localStorage.getItem("rov_tilt_step_deg") || "2");
 if (isNaN(tiltStepDeg) || tiltStepDeg < 0.5 || tiltStepDeg > 15) tiltStepDeg = 2; // Smooth unrestricted tilt (default 2°)
 // Enable Touch-Screen Hand Gesture Control by default (Left➔Left, Right➔Right, Up➔Down, Down➔Up)
@@ -1563,47 +1569,51 @@ function sliderToVirtualDeg(sDeg) {
 }
 
 function updateMainPanSliderUI() {
-  const maxD = getPanMaxDeg();
-  const halfD = maxD / 2;
-  const targetSliderDeg = virtualToSliderDeg(panTargetDeg);
   const mainPanSl = document.getElementById("main-pan-slider");
   if (mainPanSl) {
-    mainPanSl.max = maxD;
-    mainPanSl.value = targetSliderDeg;
+    mainPanSl.min = 0;
+    mainPanSl.max = 180;
+    mainPanSl.value = currentPan;
   }
   const mainPanLbl = document.getElementById("main-pan-lbl");
   if (mainPanLbl) {
-    const diffFromHome = Math.round(targetSliderDeg - halfD);
-    const dirTag = diffFromHome === 0 ? "Center" : (diffFromHome < 0 ? `${diffFromHome}° L` : `+${diffFromHome}° R`);
-    mainPanLbl.innerText = `${targetSliderDeg}° (${dirTag})`;
+    const offset = Math.round(panVirtualDeg);
+    const dirTag = offset === 0 ? "0° CENTER" : (offset < 0 ? `${Math.abs(offset)}° L` : `${offset}° R`);
+    const statusTxt = (lastPanSent >= 84 && lastPanSent <= 96) ? "STOPPED" : "ACTIVE";
+    mainPanLbl.innerText = `${statusTxt} (${dirTag})`;
+  }
+  const panDegHud = document.getElementById("lbl-pan-deg");
+  if (panDegHud) {
+    const offset = Math.round(panVirtualDeg);
+    const dirTag = offset === 0 ? "0°" : (offset < 0 ? `-${Math.abs(offset)}°` : `+${offset}°`);
+    panDegHud.innerText = panLimitDeg > 0
+      ? `${dirTag} (🛡️${panLimitDeg}° Lock)`
+      : `${dirTag} (🔓SG90 360°)`;
+  }
+  const posInfoPan = document.getElementById("lbl-pan");
+  if (posInfoPan) {
+    const offset = Math.round(panVirtualDeg);
+    posInfoPan.innerText = `${offset >= 0 ? '+' : ''}${offset}°`;
   }
 }
 
 function syncPrecisionUI() {
-  const maxD = getPanMaxDeg();
-  const camDeg = virtualToSliderDeg(panVirtualDeg);
-  const lockTag = panLimitDeg > 0 ? ` | 🛡️0°–${panLimitDeg}°` : " | 🔓Free";
   const lbl = document.getElementById("drawer-step-val");
-  if (lbl) lbl.innerText = `R:${panRightSlowAngle}° | L:${panLeftSlowAngle}° | ${panPulse20Ms}ms${lockTag}`;
-  const rsl = document.getElementById("drawer-rstep-slider");
-  if (rsl) rsl.value = panRightSlowAngle;
-  const sl = document.getElementById("drawer-step-slider");
-  if (sl) sl.value = panLeftSlowAngle;
-  const psl = document.getElementById("drawer-pulse-slider");
-  if (psl) psl.value = panPulse20Ms;
-  const lr = document.getElementById("lbl-r-angle");
-  if (lr) lr.innerText = `${panRightSlowAngle}°`;
-  const ll = document.getElementById("lbl-l-angle");
-  if (ll) ll.innerText = `${panLeftSlowAngle}°`;
-  const lp = document.getElementById("lbl-pulse-ms");
-  if (lp) lp.innerText = `${panPulse20Ms}ms`;
+  if (lbl) lbl.innerText = `R:${panRightAngle}° | L:${panLeftAngle}° | ${panPulseMs}ms (${panStepDeg}°)`;
 
-  const panDegHud = document.getElementById("lbl-pan-deg");
-  if (panDegHud) {
-    panDegHud.innerText = panLimitDeg > 0
-      ? `${camDeg}° / ${maxD}° 🛡️Lock`
-      : `${camDeg}° (🔓360° Free)`;
-  }
+  const rSl = document.getElementById("drawer-rstep-slider");
+  if (rSl) rSl.value = panRightAngle;
+  const lSl = document.getElementById("drawer-step-slider");
+  if (lSl) lSl.value = panLeftAngle;
+  const pSl = document.getElementById("drawer-pulse-slider");
+  if (pSl) pSl.value = panPulseMs;
+
+  const rLbl = document.getElementById("lbl-r-angle");
+  if (rLbl) rLbl.innerText = `${panRightAngle}°`;
+  const lLbl = document.getElementById("lbl-l-angle");
+  if (lLbl) lLbl.innerText = `${panLeftAngle}°`;
+  const pLbl = document.getElementById("lbl-pulse-ms");
+  if (pLbl) pLbl.innerText = `${panPulseMs}ms`;
 
   const is300 = (panLimitDeg === 300);
   const is330 = (panLimitDeg === 330);
@@ -1728,38 +1738,49 @@ function zeroPanHeading() {
   setTimeout(hideIndicator, 1000);
 }
 
+function onPanStepSizeChange(val) {
+  panStepDeg = Math.max(5, Math.min(45, parseInt(val, 10) || 20));
+  localStorage.setItem("rov_pan_step_deg", String(panStepDeg));
+  syncPrecisionUI();
+}
+
+function setPanStepPreset(step) {
+  panStepDeg = step;
+  localStorage.setItem("rov_pan_step_deg", String(panStepDeg));
+  syncPrecisionUI();
+  showIndicator(`📐 PAN STEP SIZE: ${step}°`);
+  setTimeout(hideIndicator, 800);
+}
+
 function onPanRightAngleChange(val) {
-  panRightSlowAngle = Math.max(98, Math.min(180, parseInt(val, 10) || 180));
-  localStorage.setItem("rov_pan_r_angle_v9", String(panRightSlowAngle));
+  panRightAngle = Math.max(98, Math.min(180, parseInt(val, 10) || 180));
+  localStorage.setItem("rov_pan_r_angle", String(panRightAngle));
   syncPrecisionUI();
 }
 
 function onPanLeftAngleChange(val) {
-  panLeftSlowAngle = Math.max(0, Math.min(82, parseInt(val, 10) || 0));
-  localStorage.setItem("rov_pan_l_angle_v9", String(panLeftSlowAngle));
+  panLeftAngle = Math.max(0, Math.min(82, parseInt(val, 10) || 0));
+  localStorage.setItem("rov_pan_l_angle", String(panLeftAngle));
   syncPrecisionUI();
 }
 
 function onPanPulseMsChange(val) {
-  panPulse20Ms = Math.max(10, Math.min(90, parseInt(val, 10) || 22));
-  panPulse10Ms = panPulse20Ms;
-  localStorage.setItem("rov_pan_pulse_v9", String(panPulse20Ms));
+  panPulseMs = Math.max(10, Math.min(100, parseInt(val, 10) || 22));
+  localStorage.setItem("rov_pan_pulse_ms", String(panPulseMs));
   syncPrecisionUI();
 }
 
 function setPan20DegPreset(rAngle, lAngle, pulseMs) {
-  panRightSlowAngle = rAngle;
-  panLeftSlowAngle = lAngle;
-  panPulse20Ms = pulseMs;
-  panPulse10Ms = pulseMs;
-  localStorage.setItem("rov_pan_r_angle_v9", String(panRightSlowAngle));
-  localStorage.setItem("rov_pan_l_angle_v9", String(panLeftSlowAngle));
-  localStorage.setItem("rov_pan_pulse_v9", String(panPulse20Ms));
+  panRightAngle = rAngle;
+  panLeftAngle = lAngle;
+  panPulseMs = pulseMs;
+  localStorage.setItem("rov_pan_r_angle", String(rAngle));
+  localStorage.setItem("rov_pan_l_angle", String(lAngle));
+  localStorage.setItem("rov_pan_pulse_ms", String(pulseMs));
   syncPrecisionUI();
-  showIndicator(`🎯 20° PAN CALIBRATED: R=${rAngle}° | L=${lAngle}° | ${pulseMs}ms`);
-  setTimeout(hideIndicator, 900);
+  showIndicator(`⏱️ PAN PULSE: ${pulseMs}ms (R:${rAngle}° / L:${lAngle}°)`);
+  setTimeout(hideIndicator, 800);
 }
-const setPan10DegPreset = setPan20DegPreset;
 
 function toggleTouchSwipeLock() {
   touchSwipeLocked = !touchSwipeLocked;
@@ -1926,11 +1947,11 @@ function handleSwipeMove(curX, curY) {
     if (Math.abs(dx) >= 26 && !panSwipeCooldown) {
       panSliderSeekActive = false;
       panSwipeCooldown = true;
-      setTimeout(() => { panSwipeCooldown = false; }, Math.max(220, panPulse20Ms + 180));
+      setTimeout(() => { panSwipeCooldown = false; }, 260);
       touchStartX = curX;
       touchStartY = curY;
       const dir = dx < 0 ? 'left' : 'right';
-      triggerPanTimed(dir);
+      triggerPan20Deg(dir, 'SWIPE');
     }
   } else {
     // Move hand UP (dy < 0) ➔ Move Camera DOWN (wantUp = false)
@@ -2058,7 +2079,7 @@ function updateLabels(p, t) {
     if (panDegHud) {
       panDegHud.innerText = panLimitDeg > 0
         ? `${camDeg}° / ${maxD}° 🛡️Lock`
-        : `${camDeg}° (🔓360° Free)`;
+        : `${camDeg}° (🔓SG90 360°)`;
     }
     updateMainPanSliderUI();
     lastPanSent = p;
@@ -2077,6 +2098,8 @@ function updateLabels(p, t) {
     if (mainTiltLbl) mainTiltLbl.innerText = `${cleanT}°${tag}`;
     const mainTiltSl = document.getElementById('main-tilt-slider');
     if (mainTiltSl) mainTiltSl.value = cleanT;
+    const tiltDegHud = document.getElementById("lbl-tilt-deg");
+    if (tiltDegHud) tiltDegHud.innerText = `${cleanT}° (MG90S)`;
     lastTiltSent = cleanT;
   }
 }
@@ -2211,8 +2234,26 @@ function stopTiltHold() {
   }
 }
 
-// ── 360° Pan Controlled 20° Step Engine ─────────────────────────────────────
-let pan20DegInFlight = false;
+// ── 360° Continuous Rotation Pan Motor Engine (GPIO 18) ─────────────────────────
+
+function setPanDirect(targetDeg, source = 'SLIDER') {
+  panSliderSeekActive = false;
+  forcePanStopImmediate();
+  panVirtualDeg = 0;
+  localStorage.setItem("rov_pan_virtual_deg", "0");
+  updateMainPanSliderUI();
+  syncPrecisionUI();
+
+  addMovementLog({
+    type: 'pan',
+    action: 'PAN_RESET_CENTER',
+    stepDeg: 0,
+    targetAngle: 90,
+    pulseMs: 0,
+    virtualDeg: 0,
+    source: source
+  });
+}
 
 function triggerPan20Deg(dir, source = 'BUTTON') {
   if (pan20DegInFlight) return;
@@ -2220,65 +2261,81 @@ function triggerPan20Deg(dir, source = 'BUTTON') {
   lastPanCommandTime = Date.now();
 
   const effectiveDir = invertPan ? (dir === 'left' ? 'right' : 'left') : dir;
-  // Full opposite torque angles: 0° Left (600us CCW), 180° Right (2400us CW)
-  const targetAngle = (effectiveDir === 'left') ? panLeftSlowAngle : panRightSlowAngle;
-  const pulseMs = panPulse20Ms;
+  const stepSigned = (effectiveDir === 'left') ? -panStepDeg : panStepDeg;
 
-  const deltaDeg = (dir === 'left') ? -20 : 20;
-  panVirtualDeg = +(panVirtualDeg + deltaDeg).toFixed(1);
+  // Soft limit checking when 330° or 300° lock is active
+  let nextVirtual = panVirtualDeg + stepSigned;
   if (panLimitDeg > 0) {
-    const halfLim = getPanHalfLimit();
-    panVirtualDeg = Math.max(-halfLim, Math.min(halfLim, panVirtualDeg));
+    const halfLimit = panLimitDeg / 2;
+    if (nextVirtual < -halfLimit) {
+      showIndicator(`🛡️ ${panLimitDeg}° LEFT LIMIT REACHED`);
+      pan20DegInFlight = false;
+      setTimeout(hideIndicator, 800);
+      return;
+    }
+    if (nextVirtual > halfLimit) {
+      showIndicator(`🛡️ ${panLimitDeg}° RIGHT LIMIT REACHED`);
+      pan20DegInFlight = false;
+      setTimeout(hideIndicator, 800);
+      return;
+    }
   }
-  panTargetDeg = panVirtualDeg;
+
+  panVirtualDeg = nextVirtual;
   localStorage.setItem("rov_pan_virtual_deg", String(panVirtualDeg));
 
-  const camDeg = virtualToSliderDeg(panVirtualDeg);
-  const maxD = getPanMaxDeg();
-  showIndicator(dir === 'left' ? `◀ LEFT 20° (${camDeg}° / ${maxD}°)` : `RIGHT 20° (${camDeg}° / ${maxD}°) ▶`);
-  updateLabels(targetAngle, undefined);
+  const pulseSec = (panPulseMs || 22) / 1000.0;
+  const targetAngle = (effectiveDir === 'left') ? panLeftAngle : panRightAngle;
+  const leftPw = Math.round(600 + (panLeftAngle / 180.0) * 1800);
+  const rightPw = Math.round(600 + (panRightAngle / 180.0) * 1800);
+
+  updateMainPanSliderUI();
+  syncPrecisionUI();
+
+  const offsetFromCenter = Math.round(panVirtualDeg);
+  const offsetLabel = offsetFromCenter === 0 ? 'CENTER (0°)' : (offsetFromCenter < 0 ? `${Math.abs(offsetFromCenter)}° L` : `${offsetFromCenter}° R`);
+  showIndicator(effectiveDir === 'left' ? `◀ LEFT ${panStepDeg}° (${offsetLabel} | ${panPulseMs}ms)` : `RIGHT ${panStepDeg}° ▶ (${offsetLabel} | ${panPulseMs}ms)`);
 
   addMovementLog({
     type: 'pan',
-    action: dir === 'left' ? 'PAN_LEFT' : 'PAN_RIGHT',
-    stepDeg: deltaDeg,
+    action: effectiveDir === 'left' ? 'PAN_LEFT_20DEG' : 'PAN_RIGHT_20DEG',
+    stepDeg: stepSigned,
     targetAngle: targetAngle,
-    pulseMs: pulseMs,
-    virtualDeg: camDeg,
+    pulseMs: panPulseMs,
+    virtualDeg: panVirtualDeg,
     source: source
   });
 
-  // 1. Send START request (immediate non-blocking HTTP post)
   fetch(getApiUrl('/api/pan'), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
-      angle: targetAngle,
       action: effectiveDir,
-      duration: +(pulseMs / 1000).toFixed(3)
+      duration: pulseSec,
+      angle: targetAngle,
+      step: panStepDeg,
+      left_pw: leftPw,
+      right_pw: rightPw
     })
-  }).catch(() => {});
-
-  // 2. Schedule STOP request after pulseMs without awaiting network roundtrip
-  setTimeout(() => {
-    fetch(getApiUrl('/api/pan'), {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({angle: 90, action: 'stop'})
-    }).catch(() => {});
-
-    // 3. Second confirmation stop 45ms later to guarantee zero creep
+  }).catch(() => {}).finally(() => {
     setTimeout(() => {
-      fetch(getApiUrl('/api/pan'), {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({angle: 90, action: 'stop'})
-      }).catch(() => {});
       pan20DegInFlight = false;
-      updateLabels(90, undefined);
-      setTimeout(hideIndicator, 200);
-    }, 45);
-  }, pulseMs);
+    }, Math.max(panPulseMs + 20, 120));
+  });
+
+  clearTimeout(panIndicatorTimer);
+  panIndicatorTimer = setTimeout(hideIndicator, 650);
+}
+
+function onPanSliderInput(val) {
+  const v = parseInt(val, 10);
+  if (v < 85) {
+    triggerPan20Deg('left', 'DRAWER_SLIDER');
+  } else if (v > 95) {
+    triggerPan20Deg('right', 'DRAWER_SLIDER');
+  }
+  const sl = document.getElementById("drawer-pan-slider");
+  if (sl) sl.value = 90;
 }
 
 // Aliases for compatibility
@@ -2289,26 +2346,20 @@ function triggerPanTimed(dir) {
 
 function startPanHold(dir, ev) {
   if (ev) ev.preventDefault();
-  panSliderSeekActive = false;
   if (panHoldInterval) {
     clearInterval(panHoldInterval);
     panHoldInterval = null;
   }
   triggerPan20Deg(dir, 'HOLD');
   panHoldInterval = setInterval(() => {
-    if (!pan20DegInFlight) {
-      triggerPan20Deg(dir, 'HOLD');
-    }
-  }, Math.max(260, panPulse20Ms + 180));
+    triggerPan20Deg(dir, 'HOLD');
+  }, 260);
 }
 
 function stopPanHold() {
   if (panHoldInterval) {
     clearInterval(panHoldInterval);
     panHoldInterval = null;
-  }
-  if (!pan20DegInFlight) {
-    forcePanStopImmediate();
   }
 }
 
@@ -2347,29 +2398,7 @@ function setTiltDirect(val) {
   setTimeout(checkStreamFrozen, 650);
 }
 
-function onPanSliderInput(val) {
-  const p = parseInt(val);
-  if (p >= 82 && p <= 98) {
-    stopPanHold();
-    return;
-  }
-  const dir = p < 90 ? 'left' : 'right';
-  if (!panTimer) {
-    triggerPanTimed(dir);
-    panTimer = setTimeout(() => { panTimer = null; }, Math.max(240, panPulse20Ms + 190));
-  }
-}
 
-function releasePanToStop() {
-  if (panSlider.value != 90) {
-    panSlider.value = 90;
-    stopPanHold();
-  }
-}
-panSlider.addEventListener('mouseup', releasePanToStop);
-panSlider.addEventListener('touchend', releasePanToStop);
-panSlider.addEventListener('pointerup', releasePanToStop);
-panSlider.addEventListener('touchcancel', releasePanToStop);
 
 function onTiltSliderInput(val) {
   const t = +parseFloat(val).toFixed(1);
@@ -2392,22 +2421,18 @@ function recenterAll() {
   panSliderSeekActive = false;
   stopPanHold();
   stopTiltHold();
-  forcePanStopImmediate();
-  panVirtualDeg = 0;
-  panTargetDeg = 0;
-  localStorage.setItem("rov_pan_virtual_deg", "0");
-  updateLabels(90, centerTiltDeg);
-  postTilt({angle: centerTiltDeg});
+  setPanDirect(90, 'RECENTER_ALL');
+  setTiltDirect(centerTiltDeg);
   setZoom(1.0);
   addMovementLog({
     type: 'system',
     action: 'RECENTER_ALL',
     stepDeg: 0,
-    targetAngle: centerTiltDeg,
+    targetAngle: 90,
     pulseMs: 0,
     source: 'BUTTON'
   });
-  showIndicator(`⨁ CENTERED (Tilt ${centerTiltDeg}° | Pan ${virtualToSliderDeg(panVirtualDeg)}°)`);
+  showIndicator(`⨁ RECENTERED (Pan 90° | Tilt ${centerTiltDeg}°)`);
   setTimeout(hideIndicator, 900);
 }
 
