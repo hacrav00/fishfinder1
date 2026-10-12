@@ -455,6 +455,19 @@ class RequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"angle": current_tilt}).encode("utf-8"))
             return
 
+        if self.path.startswith("/snapshot"):
+            try:
+                upstream = urllib.request.urlopen("http://127.0.0.1:8000/snapshot", timeout=3)
+                self.send_response(200)
+                self._send_cors()
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+                self.end_headers()
+                self.wfile.write(upstream.read())
+            except Exception:
+                self.send_error(502, "Snapshot unavailable")
+            return
+
         if self.path.startswith("/stream"):
             try:
                 upstream = urllib.request.urlopen("http://127.0.0.1:8000/stream", timeout=4)
