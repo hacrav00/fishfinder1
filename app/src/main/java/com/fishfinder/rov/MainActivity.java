@@ -24,6 +24,16 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
+import android.content.ContentValues;
+import android.media.MediaScannerConnection;
+import android.provider.MediaStore;
+import android.util.Base64;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+
 import androidx.appcompat.app.AppCompatActivity;
 
 public class MainActivity extends AppCompatActivity {
@@ -45,6 +55,12 @@ public class MainActivity extends AppCompatActivity {
             // Force app traffic onto local ROV Wi-Fi router (e.g. COFE_AF9B)
             // even when Android says "Connected to device. Can't provide Internet."
             bindToWifiNetwork();
+
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+                if (checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE, android.Manifest.permission.READ_EXTERNAL_STORAGE}, 100);
+                }
+            }
 
             webView = findViewById(R.id.webview);
             configureWebView();
@@ -238,6 +254,10 @@ public class MainActivity extends AppCompatActivity {
 
     public class WebAppInterface {
         Context mContext;
+        private File tempMediaFile = null;
+        private FileOutputStream tempMediaOut = null;
+        private String transferFileName = null;
+        private String transferMimeType = null;
 
         WebAppInterface(Context c) {
             mContext = c;
@@ -269,6 +289,155 @@ public class MainActivity extends AppCompatActivity {
                     }
                 } catch (Exception ignored) {}
             });
+        }
+
+        @JavascriptInterface
+        public void saveMediaBase64(String base64Data, String fileName, String mimeType) {
+            new Thread(() -> {
+                try {
+                    if (base64Data == null || base64Data.isEmpty()) return;
+                    String raw = base64Data;
+                    int comma = raw.indexOf(",");
+                    if (comma != -1) {
+                        raw = raw.substring(comma + 1);
+                    }
+                    byte[] bytes = Base64.decode(raw, Base64.DEFAULT);
+                    File temp = new File(getCacheDir(), "media_" + System.currentTimeMillis() + "_" + fileName);
+                    try (FileOutputStream fos = new FileOutputStream(temp)) {
+                        fos.write(bytes);
+                    }
+                    commitTempFileToStorage(temp, fileName, mimeType);
+                } catch (Exception e) {
+                    runOnUiThread(() -> Toast.makeText(mContext, "Save error: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                }
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void initMediaTransfer(String fileName, String mimeType) {
+            try {
+                transferFileName = fileName;
+                transferMimeType = mimeType;
+                tempMediaFile = new File(getCacheDir(), "chunk_" + System.currentTimeMillis() + "_" + fileName);
+                if (tempMediaFile.exists()) tempMediaFile.delete();
+                tempMediaOut = new FileOutputStream(tempMediaFile);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        @JavascriptInterface
+        public void appendMediaChunk(String chunkBase64) {
+            try {
+                if (tempMediaOut != null && chunkBase64 != null && !chunkBase64.isEmpty()) {
+                    byte[] chunk = Base64.decode(chunkBase64, Base64.DEFAULT);
+                    tempMediaOut.write(chunk);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        @JavascriptInterface
+        public void finishMediaTransfer() {
+            new Thread(() -> {
+                try {
+                    if (tempMediaOut != null) {
+                        tempMediaOut.flush();
+                        tempMediaOut.close();
+                        tempMediaOut = null;
+                    }
+                    if (tempMediaFile != null && tempMediaFile.exists()) {
+                        commitTempFileToStorage(tempMediaFile, transferFileName, transferMimeType);
+                    }
+                } catch (Exception e) {
+                    runOnUiThread(() -> Toast.makeText(mContext, "Media transfer error: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                }
+            }).start();
+        }
+
+        private void commitTempFileToStorage(File sourceFile, String fileName, String mimeType) {
+            if (sourceFile == null || !sourceFile.exists()) return;
+            try {
+                boolean isImage = (mimeType != null && mimeType.startsWith("image"));
+                boolean isVideo = (mimeType != null && mimeType.startsWith("video"));
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+                    values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
+
+                    Uri collectionUri;
+                    if (isImage) {
+                        values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/FishFinder");
+                        collectionUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+                    } else if (isVideo) {
+                        values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/FishFinder");
+                        collectionUri = MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
+                    } else {
+                        values.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/FishFinder");
+                        collectionUri = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+                    }
+                    values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+
+                    Uri itemUri = getContentResolver().insert(collectionUri, values);
+                    if (itemUri != null) {
+                        try (InputStream in = new FileInputStream(sourceFile);
+                             OutputStream out = getContentResolver().openOutputStream(itemUri)) {
+                            byte[] buffer = new byte[65536];
+                            int bytesRead;
+                            while ((bytesRead = in.read(buffer)) != -1) {
+                                out.write(buffer, 0, bytesRead);
+                            }
+                        }
+                        values.clear();
+                        values.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                        getContentResolver().update(itemUri, values, null, null);
+
+                        runOnUiThread(() -> {
+                            String typeStr = isImage ? "📸 Photo" : "🎥 Video";
+                            Toast.makeText(MainActivity.this, typeStr + " saved to Gallery (" + (isImage ? "Pictures" : "Movies") + "/FishFinder)", Toast.LENGTH_LONG).show();
+                        });
+                    } else {
+                        throw new Exception("MediaStore insertion failed");
+                    }
+                } else {
+                    File dir = new File(Environment.getExternalStoragePublicDirectory(
+                            isImage ? Environment.DIRECTORY_PICTURES : (isVideo ? Environment.DIRECTORY_MOVIES : Environment.DIRECTORY_DOWNLOADS)
+                    ), "FishFinder");
+                    if (!dir.exists()) dir.mkdirs();
+                    File destFile = new File(dir, fileName);
+
+                    try (InputStream in = new FileInputStream(sourceFile);
+                         OutputStream out = new FileOutputStream(destFile)) {
+                        byte[] buffer = new byte[65536];
+                        int bytesRead;
+                        while ((bytesRead = in.read(buffer)) != -1) {
+                            out.write(buffer, 0, bytesRead);
+                        }
+                    }
+
+                    MediaScannerConnection.scanFile(
+                            MainActivity.this,
+                            new String[]{destFile.getAbsolutePath()},
+                            new String[]{mimeType},
+                            null
+                    );
+
+                    runOnUiThread(() -> {
+                        String typeStr = isImage ? "📸 Photo" : "🎥 Video";
+                        Toast.makeText(MainActivity.this, typeStr + " saved to Gallery (" + destFile.getName() + ")", Toast.LENGTH_LONG).show();
+                    });
+                }
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(MainActivity.this, "Save failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            } finally {
+                try {
+                    if (sourceFile != null && sourceFile.exists()) {
+                        sourceFile.delete();
+                    }
+                } catch (Exception ignored) {}
+            }
         }
     }
 }
