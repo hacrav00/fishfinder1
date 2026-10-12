@@ -1358,10 +1358,6 @@ setInterval(() => {
         if (streamHasError || streamImg.naturalWidth === 0) {
           connectStream();
         }
-        // Safety Watchdog: only force stop if no pan command has run in the last 1.5s
-        if (!panHoldInterval && !pan20DegInFlight && !panSliderSeekActive && (Date.now() - lastPanCommandTime > 1500) && d.pan !== undefined && (d.pan < 84 || d.pan > 96)) {
-          forcePanStopImmediate();
-        }
       }
     })
     .catch(() => {
@@ -2031,21 +2027,11 @@ function forcePanStopImmediate() {
     panStopBackupTimer = null;
   }
   lastPanCommandTime = Date.now();
-  updateLabels(90, undefined);
   fetch(getApiUrl('/api/pan'), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({angle: 90, action: 'stop'})
+    body: JSON.stringify({action: 'stop'})
   }).catch(() => {});
-  panStopBackupTimer = setTimeout(() => {
-    lastPanCommandTime = Date.now();
-    fetch(getApiUrl('/api/pan'), {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({angle: 90, action: 'stop'})
-    }).catch(() => {});
-    updateLabels(90, undefined);
-  }, 90);
 }
 
 function postPan(data) {
