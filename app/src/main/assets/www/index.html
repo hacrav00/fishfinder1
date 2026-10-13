@@ -1951,17 +1951,16 @@ function handleSwipeMove(curX, curY) {
       const dir = dx < 0 ? 'left' : 'right';
       triggerPan20Deg(dir, 'SWIPE');
     }
-  } else {
-    // Move hand UP (dy < 0) ➔ Move Camera DOWN (wantUp = false)
-    // Move hand DOWN (dy > 0) ➔ Move Camera UP (wantUp = true)
-    if (Math.abs(dy) >= 16 && !tiltThrottleTimer) {
-      tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 85);
+    // Fluid Touchscreen Tilt Control: Proportional tracking (analog knob feel)
+    if (Math.abs(dy) >= 8 && !tiltThrottleTimer) {
+      tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 35);
       touchStartY = curY;
       touchStartX = curX;
       const wantUp = dy > 0;
-      const delta = (wantUp !== invertTilt) ? tiltStepDeg : -tiltStepDeg;
-      const nextTilt = Math.max(0, Math.min(180, +(lastTiltSent + delta).toFixed(1)));
-      showIndicator(`${wantUp ? '👆 Hand DOWN ➔ ▲ MOVE UP' : '👆 Hand UP ➔ ▼ MOVE DOWN'} (${nextTilt}°)`);
+      const stepDeg = Math.max(1, Math.min(4, Math.round(Math.abs(dy) / 10)));
+      const delta = (wantUp !== invertTilt) ? stepDeg : -stepDeg;
+      const nextTilt = Math.max(0, Math.min(180, Math.round(lastTiltSent + delta)));
+      showIndicator(`${wantUp ? '▲ UP' : '▼ DOWN'} (${nextTilt}°)`);
       updateLabels(undefined, nextTilt);
       postTilt({angle: nextTilt});
     }
@@ -2045,14 +2044,33 @@ function postPan(data) {
   }).catch(() => {});
 }
 
+let tiltPostInFlight = false;
+let pendingTiltAngle = null;
+
 function postTilt(data) {
+  if (data && data.angle !== undefined) {
+    pendingTiltAngle = data.angle;
+  }
+  if (tiltPostInFlight) return;
+  if (pendingTiltAngle === null) return;
+
+  const targetToSend = pendingTiltAngle;
+  pendingTiltAngle = null;
+  tiltPostInFlight = true;
+
   fetch(getApiUrl('/api/tilt'), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(data)
+    body: JSON.stringify({angle: targetToSend})
   }).then(r => r.json()).then(d => {
+    tiltPostInFlight = false;
     updateLabels(undefined, d.tilt);
-  }).catch(() => {});
+    if (pendingTiltAngle !== null && pendingTiltAngle !== targetToSend) {
+      postTilt();
+    }
+  }).catch(() => {
+    tiltPostInFlight = false;
+  });
 }
 
 function updateLabels(p, t) {
