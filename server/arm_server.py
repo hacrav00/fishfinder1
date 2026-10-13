@@ -27,6 +27,8 @@ except Exception:
 lgpio.gpio_claim_output(h, PAN_PIN)
 lgpio.gpio_claim_output(h, TILT_PIN)
 
+arm_lock = threading.Lock()
+
 STATE_FILE = os.path.expanduser("~/.fishfinder_servo_state.json")
 
 def load_saved_state():
