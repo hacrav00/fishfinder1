@@ -77,29 +77,45 @@ TILT_SLEW_SPEED = 70.0   # deg/sec
 TILT_TICK_HZ = 50        # 50 Hz matches standard 20ms servo PWM period
 TILT_DT = 1.0 / TILT_TICK_HZ
 
+tilt_quiet_timer = None
+
 def _tilt_interpolator_loop():
-    global current_tilt, target_tilt, tilt_engaged
+    global current_tilt, target_tilt, tilt_engaged, tilt_quiet_timer
     last_pw_sent = -1
 
     while True:
         with arm_lock:
-            # Only drive servo once user commands it (prevents boot snap to 90°)
             if tilt_engaged:
                 diff = target_tilt - current_tilt
                 if abs(diff) > 0.05:
+                    if tilt_quiet_timer:
+                        tilt_quiet_timer.cancel()
+                        tilt_quiet_timer = None
                     step = TILT_SLEW_SPEED * TILT_DT
                     if abs(diff) <= step:
                         current_tilt = target_tilt
                     else:
                         current_tilt += (step if diff > 0 else -step)
 
-                pw = deg_to_pw_tilt(current_tilt)
-                if pw != last_pw_sent:
-                    try:
-                        lgpio.tx_servo(h, TILT_PIN, pw, 50)
-                        last_pw_sent = pw
-                    except Exception:
-                        pass
+                    pw = deg_to_pw_tilt(current_tilt)
+                    if pw != last_pw_sent:
+                        try:
+                            lgpio.tx_servo(h, TILT_PIN, pw, 50)
+                            last_pw_sent = pw
+                        except Exception:
+                            pass
+                else:
+                    # Arrived at destination! Hold steady for 0.6s to finish transit,
+                    # then cleanly cut PWM to eliminate 50 Hz analog pot hunting & buzzing!
+                    if tilt_quiet_timer is None and last_pw_sent != -1:
+                        def _silence():
+                            global last_pw_sent
+                            with arm_lock:
+                                stop_pwm(TILT_PIN)
+                                last_pw_sent = -1
+                        tilt_quiet_timer = threading.Timer(0.6, _silence)
+                        tilt_quiet_timer.daemon = True
+                        tilt_quiet_timer.start()
         time.sleep(TILT_DT)
 
 # Start background interpolator thread immediately
@@ -109,13 +125,16 @@ _tilt_thread.start()
 def set_tilt(deg):
     """
     Commands target tilt angle (0°–180°).
-    Smoothly glides from current position to target without velocity shock or jitter,
-    and maintains solid continuous PWM holding torque to prevent gravity sag.
+    Smoothly glides from current position to target at calibrated 70°/s slew rate,
+    then automatically silences PWM after arriving so the motor stays completely quiet.
     """
-    global target_tilt, tilt_engaged
+    global target_tilt, tilt_engaged, tilt_quiet_timer
     raw = float(deg)
     clamped = max(0.0, min(180.0, raw))
     with arm_lock:
+        if tilt_quiet_timer:
+            tilt_quiet_timer.cancel()
+            tilt_quiet_timer = None
         target_tilt = clamped
         tilt_engaged = True
     save_current_state(current_pan, clamped)
