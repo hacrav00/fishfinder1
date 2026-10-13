@@ -42,37 +42,65 @@ def stop_pwm(pin):
         pass
 
 def deg_to_pw_tilt(deg):
-    """Maps 0..180 degrees to 600..2400 microseconds."""
+    """Maps 0..180 degrees to 600..2400 microseconds with microsecond precision."""
     clamped = max(0.0, min(180.0, float(deg)))
-    return int(600 + (clamped / 180.0) * 1800)
+    return int(round(600.0 + (clamped / 180.0) * 1800.0))
 
-tilt_sleep_timer = None
+# ── Smooth Tilt Motion Controller (Servo Tester Behavior) ────────────────────
+# MG90S 180° Positional Metal Gear Servo on GPIO 19
+# Slew rate: 70 deg/s (~1.4° per 20ms step) delivers fluid, cinematic gliding motion.
+# Holds constant 50 Hz PWM carrier wave without cutting off power, preventing camera sag & snap-back.
+current_tilt = 90.0
+target_tilt = 90.0
+TILT_SLEW_SPEED = 70.0   # deg/sec
+TILT_TICK_HZ = 50        # 50 Hz matches standard 20ms servo PWM period
+TILT_DT = 1.0 / TILT_TICK_HZ
+
+def _tilt_interpolator_loop():
+    global current_tilt, target_tilt
+    last_pw_sent = -1
+    # Initialize steady holding pulse at 90° level
+    try:
+        init_pw = deg_to_pw_tilt(90.0)
+        lgpio.tx_servo(h, TILT_PIN, init_pw, 50)
+        last_pw_sent = init_pw
+    except Exception:
+        pass
+
+    while True:
+        with arm_lock:
+            diff = target_tilt - current_tilt
+            if abs(diff) > 0.05:
+                step = TILT_SLEW_SPEED * TILT_DT
+                if abs(diff) <= step:
+                    current_tilt = target_tilt
+                else:
+                    current_tilt += (step if diff > 0 else -step)
+
+                pw = deg_to_pw_tilt(current_tilt)
+                if pw != last_pw_sent:
+                    try:
+                        lgpio.tx_servo(h, TILT_PIN, pw, 50)
+                        last_pw_sent = pw
+                    except Exception:
+                        pass
+        time.sleep(TILT_DT)
+
+# Start background interpolator thread immediately
+_tilt_thread = threading.Thread(target=_tilt_interpolator_loop, daemon=True)
+_tilt_thread.start()
 
 def set_tilt(deg):
     """
-    Drives MG90S 180° positional servo in 10° steps, then sleeps after 0.6s
-    to completely stop jittering, digital buzzing, and battery drain.
+    Commands target tilt angle (0°–180°).
+    Smoothly glides from current position to target without velocity shock or jitter,
+    and maintains solid continuous PWM holding torque to prevent gravity sag.
     """
-    global current_tilt, tilt_sleep_timer
+    global target_tilt
+    raw = float(deg)
+    clamped = max(0.0, min(180.0, raw))
     with arm_lock:
-        if tilt_sleep_timer:
-            tilt_sleep_timer.cancel()
-            tilt_sleep_timer = None
-
-        raw = float(deg)
-        # Quantize to 10 degree steps to eliminate intermediate pulse jitter
-        clean_deg = int(round(raw / 10.0) * 10)
-        clean_deg = max(0, min(180, clean_deg))
-        current_tilt = clean_deg
-        pw = deg_to_pw_tilt(clean_deg)
-        lgpio.tx_servo(h, TILT_PIN, pw, 50)
-
-        def _sleep():
-            stop_pwm(TILT_PIN)
-
-        tilt_sleep_timer = threading.Timer(0.6, _sleep)
-        tilt_sleep_timer.daemon = True
-        tilt_sleep_timer.start()
+        target_tilt = clamped
 
 pan_sleep_timer = None
 
@@ -122,9 +150,8 @@ def set_pan(deg_or_action, duration=None, left_pw=600, right_pw=2400):
         pan_sleep_timer.daemon = True
         pan_sleep_timer.start()
 
-# Initialize both motors to completely STOPPED and QUIET on startup
+# Initialize Pan to stopped on startup; Tilt holds level at 90° with 50 Hz PWM
 stop_pwm(PAN_PIN)
-stop_pwm(TILT_PIN)
 
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -481,9 +508,10 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.send_header("Expires", "0")
                 self.end_headers()
                 while True:
-                    chunk = upstream.read(65536)
+                    chunk = upstream.read(4096)
                     if not chunk: break
                     self.wfile.write(chunk)
+                    self.wfile.flush()
             except Exception:
                 self.send_error(502, "Stream unavailable")
             return
@@ -526,9 +554,9 @@ class RequestHandler(BaseHTTPRequestHandler):
             elif "action" in data:
                 act = str(data["action"]).lower()
                 if act == "up":
-                    set_tilt(current_tilt + 10)
+                    set_tilt(target_tilt + 5)
                 elif act == "down":
-                    set_tilt(current_tilt - 10)
+                    set_tilt(target_tilt - 5)
                 elif act == "center":
                     set_tilt(90)
 
@@ -536,7 +564,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._send_cors()
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps({"status": "ok", "pan": current_pan, "tilt": current_tilt}).encode("utf-8"))
+            self.wfile.write(json.dumps({"status": "ok", "pan": current_pan, "tilt": round(current_tilt, 1), "target_tilt": target_tilt}).encode("utf-8"))
             return
 
         self.send_error(404)
