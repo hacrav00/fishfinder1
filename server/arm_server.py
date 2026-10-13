@@ -65,15 +65,18 @@ def stop_pwm(pin):
         pass
 
 def deg_to_pw_tilt(deg):
-    """Maps 0..180 degrees to 600..2400 microseconds with microsecond precision."""
+    """
+    Standard CCPM Servo Tester Pulse Mapping (800..2200 microseconds centered at 1500us).
+    Matches the exact analog potentiometer curve of the CCPM Servo Consistency Master,
+    eliminating mechanical endstop grinding, motor straining, and potentiometer saturation.
+    """
     clamped = max(0.0, min(180.0, float(deg)))
-    return int(round(600.0 + (clamped / 180.0) * 1800.0))
+    return int(round(800.0 + (clamped / 180.0) * 1400.0))
 
-# ── Smooth Tilt Motion Controller (Servo Tester Behavior) ────────────────────
+# ── Smooth Tilt Motion Controller (CCPM Servo Tester Behavior) ────────────────────
 # MG90S 180° Positional Metal Gear Servo on GPIO 19
-# Slew rate: 70 deg/s (~1.4° per 20ms step) delivers fluid, cinematic gliding motion.
-# Holds constant 50 Hz PWM carrier wave without cutting off power once active, preventing camera sag & snap-back.
-TILT_SLEW_SPEED = 70.0   # deg/sec
+# Slew rate: 65 deg/s (~1.3° per 20ms step) delivers fluid, analog gliding motion.
+TILT_SLEW_SPEED = 65.0   # deg/sec
 TILT_TICK_HZ = 50        # 50 Hz matches standard 20ms servo PWM period
 TILT_DT = 1.0 / TILT_TICK_HZ
 
@@ -105,7 +108,7 @@ def _tilt_interpolator_loop():
                         except Exception:
                             pass
                 else:
-                    # Arrived at destination! Hold steady for 0.6s to finish transit,
+                    # Arrived at destination! Hold steady for 0.8s to let physical momentum settle,
                     # then cleanly cut PWM to eliminate 50 Hz analog pot hunting & buzzing!
                     if tilt_quiet_timer is None and last_pw_sent != -1:
                         def _silence():
@@ -113,7 +116,7 @@ def _tilt_interpolator_loop():
                             with arm_lock:
                                 stop_pwm(TILT_PIN)
                                 last_pw_sent = -1
-                        tilt_quiet_timer = threading.Timer(0.6, _silence)
+                        tilt_quiet_timer = threading.Timer(0.8, _silence)
                         tilt_quiet_timer.daemon = True
                         tilt_quiet_timer.start()
         time.sleep(TILT_DT)
