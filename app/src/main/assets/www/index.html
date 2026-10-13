@@ -1960,7 +1960,7 @@ function handleSwipeMove(curX, curY) {
       const stepDeg = Math.max(1, Math.min(4, Math.round(Math.abs(dy) / 10)));
       const delta = (wantUp !== invertTilt) ? stepDeg : -stepDeg;
       const nextTilt = Math.max(0, Math.min(180, Math.round(lastTiltSent + delta)));
-      showIndicator(`${wantUp ? '▲ UP' : '▼ DOWN'} (${nextTilt}°)`);
+      showIndicator(wantUp ? '▲ TILTING UP' : '▼ TILTING DOWN');
       updateLabels(undefined, nextTilt);
       postTilt({angle: nextTilt});
     }
@@ -2197,29 +2197,25 @@ window.getRecentMovementLogs = () => movementLogs;
 window.executeAiPan20Deg = (dir) => triggerPan20Deg(dir, 'AI_AGENT');
 window.executeAiTilt = (deg) => setTiltDirect(deg);
 
-// ── Down / Up Tilt Positional Control (MG90S 180° Metal Gear Servo - Smooth Servo Flow) ──
+// ── Down / Up Tilt Positional Control (MG90S 180° Metal Gear Servo - Smooth CCPM Flow) ──
 function sendTiltAction(act, source = 'BUTTON') {
-  const wantUp = (act === 'up');
-  const step = (source === 'HOLD') ? 3 : 5;
-  const delta = (wantUp !== invertTilt) ? step : -step;
-  const nextTilt = Math.max(0, Math.min(180, Math.round(lastTiltSent + delta)));
-  setTiltDirect(nextTilt, source);
+  const effectiveAct = (act === 'up' && !invertTilt) || (act === 'down' && invertTilt) ? 'up' : 'down';
+  postTilt({action: effectiveAct});
+  showIndicator(effectiveAct === 'up' ? '▲ TILTING UP' : '▼ TILTING DOWN');
+  setTimeout(hideIndicator, 550);
 }
 
 function startTiltHold(act, ev) {
   if (ev) ev.preventDefault();
   stopTiltHold();
-  sendTiltAction(act, 'HOLD');
-  tiltHoldInterval = setInterval(() => {
-    sendTiltAction(act, 'HOLD');
-  }, 120);
+  const effectiveAct = (act === 'up' && !invertTilt) || (act === 'down' && invertTilt) ? 'up' : 'down';
+  postTilt({action: effectiveAct === 'up' ? 'hold_up' : 'hold_down'});
+  showIndicator(effectiveAct === 'up' ? '▲ GLIDING UP' : '▼ GLIDING DOWN');
 }
 
 function stopTiltHold() {
-  if (tiltHoldInterval) {
-    clearInterval(tiltHoldInterval);
-    tiltHoldInterval = null;
-  }
+  postTilt({action: 'stop'});
+  setTimeout(hideIndicator, 300);
 }
 
 function setTiltDirect(val, source = 'DIRECT') {
