@@ -47,9 +47,10 @@ def stop_pwm(pin):
     except Exception:
         pass
 
+# Full 180° Servo Range Calibration (500µs..2500µs centered at 1500µs)
 def deg_to_pw(deg):
     clamped = max(0.0, min(180.0, float(deg)))
-    return int(round(800.0 + (clamped / 180.0) * 1400.0))
+    return int(round(500.0 + (clamped / 180.0) * 2000.0))
 
 def set_pan(deg_or_action):
     global current_pan, pan_sleep_timer
