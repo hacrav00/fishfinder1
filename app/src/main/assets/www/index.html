@@ -791,9 +791,9 @@
         <span class="servo-slider-val" id="main-pan-lbl">90° (Center)</span>
       </div>
       <div class="servo-slider-track">
-        <button class="btn-10deg" onclick="sendPanAction('left')" title="Step Left 10°">◀ 10°</button>
+        <button class="btn-10deg" onpointerdown="startPanHold('left', event)" onpointerup="stopPanHold()" onpointerleave="stopPanHold()" onclick="sendPanAction('left')" title="Step Left 10°">◀ 10°</button>
         <input type="range" id="main-pan-slider" min="0" max="180" step="10" value="90" oninput="onPanSliderInput(this.value)">
-        <button class="btn-10deg" onclick="sendPanAction('right')" title="Step Right 10°">10° ▶</button>
+        <button class="btn-10deg" onpointerdown="startPanHold('right', event)" onpointerup="stopPanHold()" onpointerleave="stopPanHold()" onclick="sendPanAction('right')" title="Step Right 10°">10° ▶</button>
       </div>
       <div class="hint-row" style="padding: 2px 4px 0 4px;">
         <span onclick="setPanDirect(0)">0° Left</span>
@@ -809,9 +809,9 @@
         <span class="servo-slider-val" id="main-tilt-lbl">90° (Level)</span>
       </div>
       <div class="servo-slider-track">
-        <button class="btn-10deg" onclick="sendTiltAction('down')" title="Step Down 10°">▼ 10°</button>
+        <button class="btn-10deg" onpointerdown="startTiltHold('down', event)" onpointerup="stopTiltHold()" onpointerleave="stopTiltHold()" onclick="sendTiltAction('down')" title="Step Down 10°">▼ 10°</button>
         <input type="range" id="main-tilt-slider" min="0" max="180" step="10" value="90" oninput="onTiltSliderInput(this.value)">
-        <button class="btn-10deg" onclick="sendTiltAction('up')" title="Step Up 10°">10° ▲</button>
+        <button class="btn-10deg" onpointerdown="startTiltHold('up', event)" onpointerup="stopTiltHold()" onpointerleave="stopTiltHold()" onclick="sendTiltAction('up')" title="Step Up 10°">10° ▲</button>
       </div>
       <div class="hint-row" style="padding: 2px 4px 0 4px;">
         <span onclick="setTiltDirect(0)">0° Down</span>
@@ -1933,24 +1933,24 @@ function handleSwipeMove(curX, curY) {
   const dy = curY - touchStartY;
 
   if (Math.abs(dx) > Math.abs(dy)) {
-    // Move hand LEFT (dx < 0) ➔ Move Camera LEFT ('left') by 1 slow 20° step
-    // Move hand RIGHT (dx > 0) ➔ Move Camera RIGHT ('right') by 1 slow 20° step
+    // Horizontal swipe: PAN Left / Right
     if (Math.abs(dx) >= 26 && !panSwipeCooldown) {
       panSliderSeekActive = false;
       panSwipeCooldown = true;
-      setTimeout(() => { panSwipeCooldown = false; }, 260);
+      setTimeout(() => { panSwipeCooldown = false; }, 200);
       touchStartX = curX;
       touchStartY = curY;
       const dir = dx < 0 ? 'left' : 'right';
-      triggerPan20Deg(dir, 'SWIPE');
+      sendPanAction(dir, 'SWIPE');
     }
-    // Touchscreen Tilt Control (Symmetric 26px threshold & 260ms cooldown to Pan)
+  } else {
+    // Vertical swipe: TILT Up / Down
     if (Math.abs(dy) >= 26 && !tiltSwipeCooldown) {
       tiltSwipeCooldown = true;
-      setTimeout(() => { tiltSwipeCooldown = false; }, 260);
+      setTimeout(() => { tiltSwipeCooldown = false; }, 200);
       touchStartY = curY;
       touchStartX = curX;
-      const wantUp = dy > 0;
+      const wantUp = dy < 0;
       const dir = wantUp ? 'up' : 'down';
       sendTiltAction(dir, 'SWIPE');
     }
@@ -2023,39 +2023,58 @@ function forcePanStopImmediate() {
   }).catch(() => {});
 }
 
+let panPostInFlight = false;
+let pendingPanData = null;
+
 function postPan(data) {
   lastPanCommandTime = Date.now();
+  if (data) pendingPanData = data;
+  if (panPostInFlight) return;
+  if (!pendingPanData) return;
+
+  const toSend = pendingPanData;
+  pendingPanData = null;
+  panPostInFlight = true;
+
   fetch(getApiUrl('/api/pan'), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(data)
+    body: JSON.stringify(toSend)
   }).then(r => r.json()).then(d => {
-    updateLabels(d.pan, undefined);
-  }).catch(() => {});
+    panPostInFlight = false;
+    if (d && d.pan !== undefined) {
+      updateLabels(d.pan, undefined);
+    }
+    if (pendingPanData !== null) {
+      postPan();
+    }
+  }).catch(() => {
+    panPostInFlight = false;
+  });
 }
 
 let tiltPostInFlight = false;
-let pendingTiltAngle = null;
+let pendingTiltData = null;
 
 function postTilt(data) {
-  if (data && data.angle !== undefined) {
-    pendingTiltAngle = data.angle;
-  }
+  if (data) pendingTiltData = data;
   if (tiltPostInFlight) return;
-  if (pendingTiltAngle === null) return;
+  if (!pendingTiltData) return;
 
-  const targetToSend = pendingTiltAngle;
-  pendingTiltAngle = null;
+  const toSend = pendingTiltData;
+  pendingTiltData = null;
   tiltPostInFlight = true;
 
   fetch(getApiUrl('/api/tilt'), {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({angle: targetToSend})
+    body: JSON.stringify(toSend)
   }).then(r => r.json()).then(d => {
     tiltPostInFlight = false;
-    updateLabels(undefined, d.tilt);
-    if (pendingTiltAngle !== null && pendingTiltAngle !== targetToSend) {
+    if (d && d.tilt !== undefined) {
+      updateLabels(undefined, d.tilt);
+    }
+    if (pendingTiltData !== null) {
       postTilt();
     }
   }).catch(() => {
@@ -2215,8 +2234,21 @@ function setTiltDirect(val, source = 'DIRECT') {
 function sendTiltAction(dir, source = 'BUTTON') {
   const effectiveDir = invertTilt ? (dir === 'up' ? 'down' : 'up') : dir;
   const stepSigned = (effectiveDir === 'down') ? -10 : 10;
-  const nextTilt = Math.max(0, Math.min(180, lastTiltSent + stepSigned));
-  setTiltDirect(nextTilt, source);
+  lastTiltSent = Math.max(0, Math.min(180, lastTiltSent + stepSigned));
+  updateLabels(undefined, lastTiltSent);
+  postTilt({action: effectiveDir, step: stepSigned, angle: lastTiltSent});
+  const tag = (lastTiltSent === 90) ? '90° Level' : (lastTiltSent < 90 ? `${lastTiltSent}° Down` : `${lastTiltSent}° Up`);
+  showIndicator(`${effectiveDir === 'up' ? '▲ TILT UP' : '▼ TILT DOWN'} [${tag}]`);
+  setTimeout(hideIndicator, 400);
+
+  addMovementLog({
+    type: 'tilt',
+    action: effectiveDir === 'up' ? 'TILT_UP' : 'TILT_DOWN',
+    stepDeg: stepSigned,
+    targetAngle: lastTiltSent,
+    pulseMs: 0,
+    source: source
+  });
 }
 
 function startTiltHold(dir, ev) {
@@ -2225,7 +2257,7 @@ function startTiltHold(dir, ev) {
   sendTiltAction(dir, 'HOLD');
   tiltHoldInterval = setInterval(() => {
     sendTiltAction(dir, 'HOLD');
-  }, 260);
+  }, 180);
 }
 
 function stopTiltHold() {
@@ -2281,8 +2313,25 @@ function setPanDirect(targetDeg, source = 'DIRECT') {
 function sendPanAction(dir, source = 'BUTTON') {
   const effectiveDir = invertPan ? (dir === 'left' ? 'right' : 'left') : dir;
   const stepSigned = (effectiveDir === 'left') ? -panStepDeg : panStepDeg;
-  const nextPan = Math.max(0, Math.min(180, currentPan + stepSigned));
-  setPanDirect(nextPan, source);
+  currentPan = (currentPan + stepSigned + 360) % 360;
+  lastPanSent = currentPan;
+  panVirtualDeg = currentPan;
+  localStorage.setItem("rov_pan_pos_deg", String(currentPan));
+  updateLabels(currentPan, undefined);
+  updateMainPanSliderUI();
+  postPan({action: effectiveDir, step: stepSigned});
+  showIndicator(`${effectiveDir === 'left' ? '◀ PAN LEFT' : 'PAN RIGHT ▶'} (${stepSigned > 0 ? '+' : ''}${stepSigned}°)`);
+  setTimeout(hideIndicator, 400);
+
+  addMovementLog({
+    type: 'pan',
+    action: effectiveDir === 'left' ? 'PAN_LEFT' : 'PAN_RIGHT',
+    stepDeg: stepSigned,
+    targetAngle: currentPan,
+    pulseMs: 32,
+    virtualDeg: currentPan,
+    source: source
+  });
 }
 
 // Full 180° compatibility aliases
@@ -2300,7 +2349,7 @@ function startPanHold(dir, ev) {
   sendPanAction(dir, 'HOLD');
   panHoldInterval = setInterval(() => {
     sendPanAction(dir, 'HOLD');
-  }, 260);
+  }, 180);
 }
 
 function stopPanHold() {
