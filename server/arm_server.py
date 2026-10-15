@@ -77,7 +77,7 @@ def deg_to_pw(deg):
 def broadcast_telemetry(p_deg, t_deg, p_pw=None, t_pw=None):
     """
     Sends real-time telemetry formatted for Arduino IDE Serial Monitor & Serial Plotter:
-    - Over USB/UART Serial to connected ESP (/dev/ttyUSB0, /dev/ttyACM0, /dev/serial0)
+    - Over USB/UART Serial to connected ESP (/dev/ttyUSB0, /dev/ttyACM0, /dev/serial0) at 115200 baud
     - Over Wi-Fi UDP broadcast (port 8888) for wireless ESP monitoring
     - Format: Pan_Angle:90,Tilt_Angle:90,Pan_us:1500,Tilt_us:1500
     """
@@ -85,6 +85,9 @@ def broadcast_telemetry(p_deg, t_deg, p_pw=None, t_pw=None):
     if p_pw is not None: current_pan_pw = p_pw
     if t_pw is not None: current_tilt_pw = t_pw
     line = f"Pan_Angle:{p_deg},Tilt_Angle:{t_deg},Pan_us:{current_pan_pw},Tilt_us:{current_tilt_pw}\r\n"
+    
+    # Print directly to Pi console / journalctl log
+    print(f"[PLOTTER] {line.strip()}", flush=True)
 
     # 1. UDP broadcast to ESP over Wi-Fi
     try:
@@ -95,10 +98,11 @@ def broadcast_telemetry(p_deg, t_deg, p_pw=None, t_pw=None):
         except Exception:
             pass
 
-    # 2. Serial write to USB-connected ESP
+    # 2. Serial write to USB-connected ESP (set 115200 baud)
     for sp in ['/dev/ttyUSB0', '/dev/ttyACM0', '/dev/serial0', '/dev/ttyAMA0']:
         if os.path.exists(sp):
             try:
+                os.system(f"stty -F {sp} 115200 raw -echo 2>/dev/null")
                 with open(sp, 'w') as sf:
                     sf.write(line)
                     sf.flush()
