@@ -271,18 +271,7 @@
       color: var(--accent);
     }
     #hud-hint {
-      position: absolute;
-      bottom: 82px;
-      right: 16px;
-      background: rgba(9, 13, 22, 0.78);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      padding: 5px 10px;
-      border-radius: 6px;
-      font-size: 11px;
-      color: var(--muted);
-      z-index: 40;
-      pointer-events: none;
-      backdrop-filter: blur(4px);
+      display: none;
     }
 
     /* Bottom Control Bar */
@@ -376,19 +365,22 @@
       font-size: 14px;
     }
 
-    /* Main-Screen Dual Servo Sliders Deck (Replaces Up/Down/Left/Right Buttons on Main Bar) */
+    /* Main-Screen Dual Servo Sliders Deck (Floating above bottom bar, 100% visible) */
     .servo-sliders-deck {
+      position: absolute;
+      bottom: 82px;
+      right: 12px;
+      z-index: 60;
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      min-width: 248px;
-      max-width: 310px;
-      flex: 1;
-      background: rgba(14, 20, 32, 0.92);
-      border: 1px solid rgba(0, 229, 181, 0.35);
+      gap: 5px;
+      width: 270px;
+      background: rgba(14, 20, 32, 0.94);
+      border: 1px solid rgba(0, 229, 181, 0.4);
       border-radius: 12px;
-      padding: 6px 9px;
+      padding: 7px 10px;
       backdrop-filter: blur(8px);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
     }
     .servo-slider-row {
       display: flex;
@@ -788,43 +780,43 @@
         <span>Night</span>
       </button>
     </div>
+  </div>
 
-    <!-- Live On-Screen Servo Sliders & Movement Controls -->
-    <div class="servo-sliders-deck">
-      <!-- Left / Right Pan Servo (Capable of full 0°–180° rotation in 10° steps) -->
-      <div class="servo-slider-row">
-        <div class="servo-slider-head">
-          <span>◀ LEFT / RIGHT PAN (0°–180° FULL ROTATION | 10° STEPS) ▶</span>
-          <span class="servo-slider-val" id="main-pan-lbl">90° (Center)</span>
-        </div>
-        <div class="servo-slider-track">
-          <button class="btn-10deg" onclick="sendPanAction('left')" title="Step Left 10°">◀ 10°</button>
-          <input type="range" id="main-pan-slider" min="0" max="180" step="10" value="90" oninput="onPanSliderInput(this.value)">
-          <button class="btn-10deg" onclick="sendPanAction('right')" title="Step Right 10°">10° ▶</button>
-        </div>
-        <div class="hint-row" style="padding: 2px 4px 0 4px;">
-          <span onclick="setPanDirect(0)">0° Full Left</span>
-          <span onclick="setPanDirect(90)" style="color:var(--accent); font-weight:bold;">⨁ 90° Center</span>
-          <span onclick="setPanDirect(180)">180° Full Right</span>
-        </div>
+  <!-- Live Floating Dual Servo Sliders Deck (Always 100% visible) -->
+  <div class="servo-sliders-deck">
+    <!-- Left / Right Pan -->
+    <div class="servo-slider-row">
+      <div class="servo-slider-head">
+        <span style="font-weight: bold; color: #fff;">◀ Left / Right ▶</span>
+        <span class="servo-slider-val" id="main-pan-lbl">90° (Center)</span>
       </div>
+      <div class="servo-slider-track">
+        <button class="btn-10deg" onclick="sendPanAction('left')" title="Step Left 10°">◀ 10°</button>
+        <input type="range" id="main-pan-slider" min="0" max="180" step="10" value="90" oninput="onPanSliderInput(this.value)">
+        <button class="btn-10deg" onclick="sendPanAction('right')" title="Step Right 10°">10° ▶</button>
+      </div>
+      <div class="hint-row" style="padding: 2px 4px 0 4px;">
+        <span onclick="setPanDirect(0)">0° Left</span>
+        <span onclick="setPanDirect(90)" style="color:var(--accent); font-weight:bold;">⨁ 90° Center</span>
+        <span onclick="setPanDirect(180)">180° Right</span>
+      </div>
+    </div>
 
-      <!-- Down / Up Tilt Servo (MG90S 180° Positional Metal Gear Servo, Smooth Flow) -->
-      <div class="servo-slider-row">
-        <div class="servo-slider-head">
-          <span>▼ DOWN / UP TILT (MG90S 180° | SMOOTH FLOW) ▲</span>
-          <span class="servo-slider-val" id="main-tilt-lbl">90° (Level)</span>
-        </div>
-        <div class="servo-slider-track">
-          <button class="btn-10deg" onclick="sendTiltAction('down')" title="Step Down 5°">▼ 5°</button>
-          <input type="range" id="main-tilt-slider" min="0" max="180" step="1" value="90" oninput="onTiltSliderInput(this.value)">
-          <button class="btn-10deg" onclick="sendTiltAction('up')" title="Step Up 5°">5° ▲</button>
-        </div>
-        <div class="hint-row" style="padding: 2px 4px 0 4px;">
-          <span onclick="setTiltDirect(0)">0° Full Down</span>
-          <span onclick="setTiltDirect(90)" style="color:var(--accent); font-weight:bold;">⨁ 90° Level</span>
-          <span onclick="setTiltDirect(180)">180° Full Up</span>
-        </div>
+    <!-- Up / Down Tilt -->
+    <div class="servo-slider-row">
+      <div class="servo-slider-head">
+        <span style="font-weight: bold; color: #fff;">▲ Up / Down ▼</span>
+        <span class="servo-slider-val" id="main-tilt-lbl">90° (Level)</span>
+      </div>
+      <div class="servo-slider-track">
+        <button class="btn-10deg" onclick="sendTiltAction('down')" title="Step Down 10°">▼ 10°</button>
+        <input type="range" id="main-tilt-slider" min="0" max="180" step="10" value="90" oninput="onTiltSliderInput(this.value)">
+        <button class="btn-10deg" onclick="sendTiltAction('up')" title="Step Up 10°">10° ▲</button>
+      </div>
+      <div class="hint-row" style="padding: 2px 4px 0 4px;">
+        <span onclick="setTiltDirect(0)">0° Down</span>
+        <span onclick="setTiltDirect(90)" style="color:var(--accent); font-weight:bold;">⨁ 90° Level</span>
+        <span onclick="setTiltDirect(180)">180° Up</span>
       </div>
     </div>
   </div>
