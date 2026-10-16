@@ -1,581 +1,349 @@
 #!/usr/bin/env python3
-"""
-arm_server.py — FishFinder Robotic Arm & Video Hub
-===================================================
-Jitter-Free Dual Servo Controller with Idle Auto-Sleep:
-- Tilt (GPIO 19 / Pin 35): MG90S 180° Positional Metal Gear Servo with auto-sleep after positioning
-- Pan  (GPIO 18 / Pin 12): SG90 360° Continuous Rotation Servo with hardware pulse cutoff (no creep)
-"""
-import os
-import sys
-import json
-import time
-import threading
-import urllib.request
+import os, sys, json, time, threading, urllib.request, socket
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-import lgpio
 
-PAN_PIN = 18    # GPIO 18, Physical Pin 12 (SG90 360° Continuous Rotation)
-TILT_PIN = 19   # GPIO 19, Physical Pin 35 (MG90S 180° Positional Metal Gear)
-
-# Initialize native lgpio driver
 try:
-    h = lgpio.gpiochip_open(0)
+    import pigpio
+    pi_hw = pigpio.pi()
+    if not pi_hw.connected:
+        pi_hw = None
 except Exception:
-    h = lgpio.gpiochip_open(4)
+    pi_hw = None
 
-lgpio.gpio_claim_output(h, PAN_PIN)
-lgpio.gpio_claim_output(h, TILT_PIN)
+try:
+    import lgpio
+except ImportError:
+    lgpio = None
 
-arm_lock = threading.Lock()
-current_tilt = 90
-current_pan = 90
+PAN_PIN = 18    # GPIO 18 (Pan - Left/Right, 1000us=Left, 1500us=Center, 2000us=Right)
+TILT_PIN = 19   # GPIO 19 (Tilt - Up/Down, 1000us=Down, 1500us=Center, 2000us=Up)
 
-tilt_sleep_timer = None
-pan_timer = None
+h = None
+if lgpio:
+    try:
+        h = lgpio.gpiochip_open(0)
+    except Exception:
+        try:
+            h = lgpio.gpiochip_open(4)
+        except Exception:
+            h = None
+
+    if h is not None:
+        try:
+            lgpio.gpio_claim_output(h, PAN_PIN)
+            lgpio.gpio_claim_output(h, TILT_PIN)
+        except Exception:
+            pass
+
+def output_servo(pin, pw):
+    """Outputs hardware PWM pulses to servo with zero jitter."""
+    if pi_hw and pi_hw.connected:
+        try:
+            pi_hw.set_servo_pulsewidth(pin, int(pw))
+            return
+        except Exception:
+            pass
+    if lgpio and h is not None:
+        try:
+            lgpio.tx_servo(h, pin, int(pw), 50)
+        except Exception:
+            pass
 
 def stop_pwm(pin):
-    """Cleanly cuts off pulses using lgpio.tx_pulse(0, 0). Eliminates jitter, buzzing, and creeping!"""
+    """Cleanly stops pulses and drives pin LOW (0V) to prevent floating line glitches."""
+    if pi_hw and pi_hw.connected:
+        try:
+            pi_hw.set_servo_pulsewidth(pin, 0)
+        except Exception:
+            pass
+    if lgpio and h is not None:
+        try:
+            lgpio.tx_pulse(h, pin, 0, 0)
+            lgpio.gpio_write(h, pin, 0)
+        except Exception:
+            pass
+
+arm_lock = threading.Lock()
+STATE_FILE = os.path.expanduser('~/.fishfinder_servo_state.json')
+
+def load_state():
     try:
-        lgpio.tx_pulse(h, pin, 0, 0)
+        if os.path.exists(STATE_FILE):
+            with open(STATE_FILE, 'r') as f:
+                d = json.load(f)
+                return float(d.get('pan', 90.0)), float(d.get('tilt', 90.0))
+    except Exception:
+        pass
+    return 90.0, 90.0
+
+def save_state(p, t):
+    try:
+        with open(STATE_FILE, 'w') as f:
+            json.dump({'pan': p, 'tilt': t}, f)
     except Exception:
         pass
 
-def deg_to_pw_tilt(deg):
-    """Maps 0..180 degrees to 600..2400 microseconds with microsecond precision."""
-    clamped = max(0.0, min(180.0, float(deg)))
-    return int(round(600.0 + (clamped / 180.0) * 1800.0))
-
-# ── Smooth Tilt Motion Controller (Servo Tester Behavior) ────────────────────
-# MG90S 180° Positional Metal Gear Servo on GPIO 19
-# Slew rate: 70 deg/s (~1.4° per 20ms step) delivers fluid, cinematic gliding motion.
-# Holds constant 50 Hz PWM carrier wave without cutting off power, preventing camera sag & snap-back.
-current_tilt = 90.0
-target_tilt = 90.0
-TILT_SLEW_SPEED = 70.0   # deg/sec
-TILT_TICK_HZ = 50        # 50 Hz matches standard 20ms servo PWM period
-TILT_DT = 1.0 / TILT_TICK_HZ
-
-def _tilt_interpolator_loop():
-    global current_tilt, target_tilt
-    last_pw_sent = -1
-    # Initialize steady holding pulse at 90° level
-    try:
-        init_pw = deg_to_pw_tilt(90.0)
-        lgpio.tx_servo(h, TILT_PIN, init_pw, 50)
-        last_pw_sent = init_pw
-    except Exception:
-        pass
-
-    while True:
-        with arm_lock:
-            diff = target_tilt - current_tilt
-            if abs(diff) > 0.05:
-                step = TILT_SLEW_SPEED * TILT_DT
-                if abs(diff) <= step:
-                    current_tilt = target_tilt
-                else:
-                    current_tilt += (step if diff > 0 else -step)
-
-                pw = deg_to_pw_tilt(current_tilt)
-                if pw != last_pw_sent:
-                    try:
-                        lgpio.tx_servo(h, TILT_PIN, pw, 50)
-                        last_pw_sent = pw
-                    except Exception:
-                        pass
-        time.sleep(TILT_DT)
-
-# Start background interpolator thread immediately
-_tilt_thread = threading.Thread(target=_tilt_interpolator_loop, daemon=True)
-_tilt_thread.start()
-
-def set_tilt(deg):
-    """
-    Commands target tilt angle (0°–180°).
-    Smoothly glides from current position to target without velocity shock or jitter,
-    and maintains solid continuous PWM holding torque to prevent gravity sag.
-    """
-    global target_tilt
-    raw = float(deg)
-    clamped = max(0.0, min(180.0, raw))
-    with arm_lock:
-        target_tilt = clamped
+current_pan, current_tilt = load_state()
+current_pan = int(current_pan)
+current_tilt = int(current_tilt)
+current_pan_pw = 1500
+current_tilt_pw = 1500
 
 pan_sleep_timer = None
+tilt_sleep_timer = None
 
-def set_pan(deg_or_action, duration=None, left_pw=600, right_pw=2400):
+# UDP broadcast socket for ESP wireless telemetry (port 8888)
+udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+except Exception:
+    pass
+
+# Standard RC Servo Pulse Mapping (1000µs [1.0ms] - 1500µs [1.5ms] - 2000µs [2.0ms])
+def deg_to_pw(deg):
+    clamped = max(0.0, min(180.0, float(deg)))
+    return int(round(1000.0 + (clamped / 180.0) * 1000.0))
+
+def broadcast_telemetry(p_deg, t_deg, p_pw=None, t_pw=None):
     """
-    GPIO 18: Pan Servo Controller (Capable of full 0°–180° positional rotation):
-    - When given an angle (0°–180°): Drives to target position in 10° steps, holds for 0.7s
-      so the motor smoothly completes transit, then auto-sleeps via stop_pwm to eliminate jitter/buzzing.
-    - When given an action ('left', 'right'): Steps by 10°, drives to target position, holds for 0.7s, auto-sleeps.
-    - Stop ('stop'): Cuts PWM pulses completely via stop_pwm.
+    Sends real-time telemetry formatted for Arduino IDE Serial Monitor & Serial Plotter:
+    - Over USB/UART Serial to connected ESP (/dev/ttyUSB0, /dev/ttyACM0, /dev/serial0) at 115200 baud
+    - Over Wi-Fi UDP broadcast (port 8888) for wireless ESP monitoring
+    - Format: Pan_Angle:90,Tilt_Angle:90,Pan_us:1500,Tilt_us:1500
     """
-    global current_pan, pan_sleep_timer
+    global current_pan_pw, current_tilt_pw
+    if p_pw is not None: current_pan_pw = p_pw
+    if t_pw is not None: current_tilt_pw = t_pw
+    line = f"Pan_Angle:{p_deg},Tilt_Angle:{t_deg},Pan_us:{current_pan_pw},Tilt_us:{current_tilt_pw}\r\n"
+    
+    # Print directly to Pi console / journalctl log
+    print(f"[PLOTTER] {line.strip()}", flush=True)
+
+    # 1. UDP broadcast to ESP over Wi-Fi
+    try:
+        udp_sock.sendto(line.encode('ascii'), ('<broadcast>', 8888))
+    except Exception:
+        try:
+            udp_sock.sendto(line.encode('ascii'), ('255.255.255.255', 8888))
+        except Exception:
+            pass
+
+    # 2. Serial write to USB-connected ESP (set 115200 baud)
+    for sp in ['/dev/ttyUSB0', '/dev/ttyACM0', '/dev/serial0', '/dev/ttyAMA0']:
+        if os.path.exists(sp):
+            try:
+                os.system(f"stty -F {sp} 115200 raw -echo 2>/dev/null")
+                with open(sp, 'w') as sf:
+                    sf.write(line)
+                    sf.flush()
+            except Exception:
+                pass
+            break
+
+def set_pan(data):
+    """
+    Standard RC motor & servo control (10° increments, 1000µs - 1500µs - 2000µs):
+    - 1000µs (1.0ms) = Left (0°) / CCW
+    - 1500µs (1.5ms) = Medium (90°) / Center Neutral Stop
+    - 2000µs (2.0ms) = Right (180°) / CW
+    - Holds continuous pulses for 0.7s so servo completes rotation smoothly, then cleanly sleeps.
+    """
+    global current_pan, current_pan_pw, pan_sleep_timer
     with arm_lock:
         if pan_sleep_timer:
             pan_sleep_timer.cancel()
             pan_sleep_timer = None
 
-        if isinstance(deg_or_action, str):
-            act = deg_or_action.lower()
-            if act == "left":
-                target_deg = max(0, current_pan - 10)
-                current_pan = target_deg
-                pw = deg_to_pw_tilt(target_deg)
-            elif act == "right":
-                target_deg = min(180, current_pan + 10)
-                current_pan = target_deg
-                pw = deg_to_pw_tilt(target_deg)
-            elif act in ("center", "recenter"):
+        action = None
+        target_deg = None
+
+        if isinstance(data, dict):
+            action = data.get('action')
+            if 'step' in data and not action:
+                s = float(data['step'])
+                action = 'right' if s > 0 else 'left'
+            elif 'angle' in data:
+                try: target_deg = float(data['angle'])
+                except Exception: pass
+        elif isinstance(data, str):
+            try:
+                target_deg = float(data)
+            except ValueError:
+                action = data.lower()
+        elif isinstance(data, (int, float)):
+            target_deg = float(data)
+
+        if action:
+            act = action.lower()
+            if act in ('left', 'step_left', 'pan_left'):
+                current_pan = max(0, current_pan - 10)
+            elif act in ('right', 'step_right', 'pan_right'):
+                current_pan = min(180, current_pan + 10)
+            elif act in ('center', 'recenter', 'level'):
                 current_pan = 90
-                pw = deg_to_pw_tilt(90)
-            else: # "stop"
-                stop_pwm(PAN_PIN)
+            elif act in ('stop', 'neutral'):
+                current_pan_pw = 1500
+                output_servo(PAN_PIN, 1500)
+                broadcast_telemetry(current_pan, current_tilt, current_pan_pw, current_tilt_pw)
                 return
-        else:
-            deg = float(deg_or_action)
-            clean_deg = int(round(deg / 10.0) * 10)
-            clean_deg = max(0, min(180, clean_deg))
-            current_pan = clean_deg
-            pw = deg_to_pw_tilt(clean_deg)
+            else:
+                stop_pwm(PAN_PIN)
+                broadcast_telemetry(current_pan, current_tilt, current_pan_pw, current_tilt_pw)
+                return
+        elif target_deg is not None:
+            current_pan = max(0, min(180, int(round(target_deg / 10.0) * 10)))
 
-        lgpio.tx_servo(h, PAN_PIN, pw, 50)
+        pw = deg_to_pw(current_pan)
+        current_pan_pw = pw
+        output_servo(PAN_PIN, pw)
+        save_state(current_pan, current_tilt)
+        broadcast_telemetry(current_pan, current_tilt, pw, current_tilt_pw)
 
-        def _sleep():
+        def _sleep_pan():
             stop_pwm(PAN_PIN)
 
-        pan_sleep_timer = threading.Timer(0.7, _sleep)
+        pan_sleep_timer = threading.Timer(0.7, _sleep_pan)
         pan_sleep_timer.daemon = True
         pan_sleep_timer.start()
 
-# Initialize Pan to stopped on startup; Tilt holds level at 90° with 50 Hz PWM
+def set_tilt(data):
+    """
+    Smooth, full-range Tilt control (10° increments, 1000µs - 1500µs - 2000µs):
+    - 1000µs (1.0ms) = Down (0°)
+    - 1500µs (1.5ms) = Medium Level (90°)
+    - 2000µs (2.0ms) = Up (180°)
+    - Auto-sleeps after 0.7s to completely eliminate 50 Hz hunting vibration and buzzing.
+    """
+    global current_tilt, current_tilt_pw, tilt_sleep_timer
+    with arm_lock:
+        if tilt_sleep_timer:
+            tilt_sleep_timer.cancel()
+            tilt_sleep_timer = None
+
+        action = None
+        target_deg = None
+
+        if isinstance(data, dict):
+            action = data.get('action')
+            if 'step' in data and not action:
+                s = float(data['step'])
+                action = 'up' if s > 0 else 'down'
+            elif 'angle' in data:
+                try: target_deg = float(data['angle'])
+                except Exception: pass
+        elif isinstance(data, str):
+            try:
+                target_deg = float(data)
+            except ValueError:
+                action = data.lower()
+        elif isinstance(data, (int, float)):
+            target_deg = float(data)
+
+        if action:
+            act = action.lower()
+            if act in ('up', 'hold_up', 'step_up', 'tilt_up'):
+                current_tilt = min(180, current_tilt + 10)
+            elif act in ('down', 'hold_down', 'step_down', 'tilt_down'):
+                current_tilt = max(0, current_tilt - 10)
+            elif act in ('center', 'recenter', 'level'):
+                current_tilt = 90
+            else:
+                stop_pwm(TILT_PIN)
+                broadcast_telemetry(current_pan, current_tilt, current_pan_pw, current_tilt_pw)
+                return
+        elif target_deg is not None:
+            current_tilt = max(0, min(180, int(round(target_deg / 10.0) * 10)))
+
+        pw = deg_to_pw(current_tilt)
+        current_tilt_pw = pw
+        output_servo(TILT_PIN, pw)
+        save_state(current_pan, current_tilt)
+        broadcast_telemetry(current_pan, current_tilt, current_pan_pw, pw)
+
+        def _sleep_tilt():
+            stop_pwm(TILT_PIN)
+
+        tilt_sleep_timer = threading.Timer(0.7, _sleep_tilt)
+        tilt_sleep_timer.daemon = True
+        tilt_sleep_timer.start()
+
+# Clean boot: silent 0V ground, never twitch or snap
 stop_pwm(PAN_PIN)
+stop_pwm(TILT_PIN)
+broadcast_telemetry(current_pan, current_tilt, deg_to_pw(current_pan), deg_to_pw(current_tilt))
 
-HTML_PAGE = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#0a0e14">
-<title>FishFinder ROV Controller</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
-  body { background: #0a0e14; color: #e6edf3; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 12px; }
-  header { width: 100%; max-width: 900px; display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #21262d; margin-bottom: 12px; }
-  h1 { font-size: 1.2rem; color: #00d4aa; display: flex; align-items: center; gap: 8px; }
-  .badge { background: #161b22; border: 1px solid #30363d; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; color: #58a6ff; font-weight: 600; }
-  .container { width: 100%; max-width: 900px; display: grid; grid-template-columns: 1fr; gap: 14px; }
-  @media(min-width: 768px) { .container { grid-template-columns: 2fr 1fr; } }
-  .video-card { background: #010409; border: 1px solid #21262d; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
-  .video-container { position: relative; width: 100%; padding-top: 56.25%; background: #000; }
-  .video-container img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
-  .controls-card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
-  .section-title { font-size: 0.85rem; font-weight: 700; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #21262d; padding-bottom: 6px; }
-  .dpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; max-width: 220px; margin: 0 auto; }
-  .btn { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; border-radius: 6px; padding: 12px; font-weight: 600; cursor: pointer; text-align: center; transition: all 0.1s ease; user-select: none; }
-  .btn:hover { background: #30363d; color: #fff; }
-  .btn:active { background: #00d4aa; color: #000; transform: scale(0.96); }
-  .btn-accent { background: #0f766e; color: #99f6e4; border-color: #14b8a6; }
-  .btn-accent:active { background: #14b8a6; color: #000; }
-  .slider-row { display: flex; flex-direction: column; gap: 6px; }
-  .slider-lbl { display: flex; justify-content: space-between; font-size: 0.85rem; color: #c9d1d9; font-weight: 500; }
-  .slider-val { font-family: monospace; font-weight: 700; color: #38bdf8; }
-  input[type=range] { width: 100%; accent-color: #00d4aa; height: 10px; border-radius: 5px; cursor: pointer; }
-  .hint-row { display: flex; justify-content: space-between; font-size: 10px; color: #64748b; margin-top: 2px; }
-  .hint-row span { cursor: pointer; padding: 2px 4px; border-radius: 3px; }
-  .hint-row span:hover { color: #38bdf8; background: #21262d; }
-  .status-bar { font-size: 0.8rem; color: #8b949e; text-align: center; margin-top: 4px; }
-</style>
-</head>
-<body>
-<header>
-  <h1><span>🐟</span> FishFinder ROV Controller</h1>
-  <div class="badge" id="driver-badge">● LIVE FEED</div>
-</header>
-<div class="container">
-  <div class="video-card">
-    <div class="video-container" id="video-touch-area" style="touch-action: none; cursor: grab;">
-      <img id="stream-img" src="" alt="Camera Feed">
-      <div id="gesture-indicator" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(11,15,25,0.85); color:#00d4aa; padding:10px 18px; border-radius:12px; font-weight:bold; font-size:15px; pointer-events:none; border:1px solid #00d4aa; z-index:10; box-shadow:0 4px 12px rgba(0,0,0,0.5);">
-        <span id="gesture-text">SWIPE</span>
-      </div>
-      <div style="position:absolute; bottom:8px; right:10px; background:rgba(15,23,42,0.75); padding:3px 8px; border-radius:6px; font-size:10px; color:#94a3b8; pointer-events:none; backdrop-filter:blur(4px);">
-        👆 Swipe screen to move camera
-      </div>
-    </div>
-    <div style="padding: 10px 14px; font-size: 0.85rem; color: #8b949e; display: flex; justify-content: space-between;">
-      <span>Camera Feed (Port 8000)</span>
-      <span id="pos-info" style="color:#00d4aa; font-weight:600;">Pan: STOPPED | Tilt: 90°</span>
-    </div>
-  </div>
-  <div class="controls-card">
-    <div class="section-title">Pan & Tilt Servo Controls (0°–180° | 10° Steps)</div>
-    <div class="dpad">
-      <div></div>
-      <button class="btn" onclick="sendTiltAction('up')">▲ 10° Up</button>
-      <div></div>
-      <button class="btn" onclick="sendPanAction('left')">◀ 10° Left</button>
-      <button class="btn btn-accent" onclick="recenter()">⨁ Center (90°)</button>
-      <button class="btn" onclick="sendPanAction('right')">10° Right ▶</button>
-      <div></div>
-      <button class="btn" onclick="sendTiltAction('down')">▼ 10° Down</button>
-      <div></div>
-    </div>
-    
-    <!-- Pan Positional Slider (0°–180° in 10° steps) -->
-    <div class="slider-row">
-      <div class="slider-lbl">
-        <span>Pan Position (0°–180° Full Rotation)</span>
-        <span id="pan-val" class="slider-val">90° (Center)</span>
-      </div>
-      <input type="range" id="pan-slider" min="0" max="180" step="10" value="90" oninput="onPanInput(this.value)">
-      <div class="hint-row">
-        <span onclick="setPanDirect(0)">0° Full Left</span>
-        <span onclick="setPanDirect(90)" style="color:#00d4aa; font-weight:bold;">90° Center</span>
-        <span onclick="setPanDirect(180)">180° Full Right</span>
-      </div>
-    </div>
-
-    <!-- Tilt Positional Slider (0°–180° in 10° steps) -->
-    <div class="slider-row" style="margin-top: 6px;">
-      <div class="slider-lbl">
-        <span>Tilt Angle (0°–180° Anti-Jitter)</span>
-        <span id="tilt-val" class="slider-val">90° (Level)</span>
-      </div>
-      <input type="range" id="tilt-slider" min="0" max="180" step="10" value="90" oninput="onTiltSlider(this.value)">
-      <div class="hint-row">
-        <span onclick="setTiltDirect(0)">0° Full Down</span>
-        <span onclick="setTiltDirect(90)" style="color:#00d4aa; font-weight:bold;">90° Level</span>
-        <span onclick="setTiltDirect(180)">180° Full Up</span>
-      </div>
-    </div>
-
-    <div class="status-bar">10° Anti-Jitter Steps & Idle Auto-Sleep active: Motors stay completely quiet and still when stationary.</div>
-  </div>
-</div>
-<script>
-const feed = document.getElementById("stream-img");
-feed.src = "http://" + window.location.hostname + ":8000/stream";
-feed.onerror = function() {
-  feed.src = "/stream?t=" + Date.now();
-};
-
-let lastPanSent = 90;
-let lastTiltSent = 90;
-let panTimer = null;
-let tiltTimer = null;
-
-function post(url, data) {
-  return fetch(url, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(data)
-  }).then(r => r.json()).then(d => {
-    updateLabels(d.pan, d.tilt);
-  }).catch(e => console.error(e));
-}
-
-function updateLabels(p, t) {
-  if (p !== undefined) {
-    let cleanP = Math.round(p / 10) * 10;
-    let tag = cleanP == 90 ? ' (Center)' : (cleanP < 90 ? ' (' + (90 - cleanP) + '° Left)' : ' (' + (cleanP - 90) + '° Right)');
-    document.getElementById('pan-val').innerText = cleanP + '°' + tag;
-    document.getElementById('pan-slider').value = cleanP;
-    lastPanSent = cleanP;
-  }
-  if (t !== undefined) {
-    let cleanT = Math.round(t / 10) * 10;
-    let tag = cleanT == 90 ? ' (Level)' : (cleanT < 90 ? ' (Down)' : ' (Up)');
-    document.getElementById('tilt-val').innerText = cleanT + '°' + tag;
-    document.getElementById('tilt-slider').value = cleanT;
-    lastTiltSent = cleanT;
-  }
-  const curP = p !== undefined ? p : lastPanSent;
-  const curT = t !== undefined ? t : lastTiltSent;
-  document.getElementById('pos-info').innerText = 'Pan: ' + curP + '° | Tilt: ' + curT + '°';
-}
-
-function sendPanAction(dir) {
-  const nextPan = dir === 'left' ? Math.max(0, lastPanSent - 10) : Math.min(180, lastPanSent + 10);
-  setPanDirect(nextPan);
-}
-
-function sendTiltAction(act) {
-  const nextTilt = act === 'up' ? Math.min(180, lastTiltSent + 10) : Math.max(0, lastTiltSent - 10);
-  setTiltDirect(nextTilt);
-}
-
-function setPanDirect(val) {
-  const cleanP = Math.max(0, Math.min(180, Math.round(parseInt(val) / 10) * 10));
-  updateLabels(cleanP, undefined);
-  post('/api/pan', {angle: cleanP});
-}
-
-function setTiltDirect(val) {
-  const cleanT = Math.max(0, Math.min(180, Math.round(parseInt(val) / 10) * 10));
-  updateLabels(undefined, cleanT);
-  post('/api/tilt', {angle: cleanT});
-}
-
-function onPanInput(val) {
-  const p = Math.round(parseInt(val) / 10) * 10;
-  updateLabels(p, undefined);
-  if (panTimer) clearTimeout(panTimer);
-  panTimer = setTimeout(() => {
-    post('/api/pan', {angle: p});
-  }, 40);
-}
-
-function onTiltSlider(val) {
-  const t = Math.round(parseInt(val) / 10) * 10;
-  updateLabels(undefined, t);
-  if (tiltTimer) clearTimeout(tiltTimer);
-  tiltTimer = setTimeout(() => {
-    post('/api/tilt', {angle: t});
-  }, 40);
-}
-
-function recenter() {
-  setPanDirect(90);
-  setTiltDirect(90);
-}
-
-window.addEventListener('keydown', e => {
-  if (e.repeat) return;
-  if (e.key === 'w' || e.key === 'ArrowUp') sendTiltAction('up');
-  else if (e.key === 's' || e.key === 'ArrowDown') sendTiltAction('down');
-  else if (e.key === 'a' || e.key === 'ArrowLeft') sendPanAction('left');
-  else if (e.key === 'd' || e.key === 'ArrowRight') sendPanAction('right');
-  else if (e.key === ' ') recenter();
-});
-
-// --- Screen Touching / Swipe Camera Movement ---
-const touchArea = document.getElementById("video-touch-area");
-const indicator = document.getElementById("gesture-indicator");
-const indicatorText = document.getElementById("gesture-text");
-
-let touchStartX = 0, touchStartY = 0;
-let isTouching = false;
-let currentSwipeAction = null;
-let tiltThrottleTimer = null;
-
-function showIndicator(txt) {
-  indicatorText.innerText = txt;
-  indicator.style.display = "block";
-}
-function hideIndicator() {
-  indicator.style.display = "none";
-}
-
-function handleSwipeMove(curX, curY) {
-  const dx = curX - touchStartX;
-  const dy = curY - touchStartY;
-  
-  if (Math.abs(dx) > Math.abs(dy)) {
-    if (Math.abs(dx) > 28 && !currentSwipeAction) {
-      currentSwipeAction = dx < 0 ? 'left' : 'right';
-      sendPanAction(currentSwipeAction);
-      showIndicator(currentSwipeAction === 'left' ? '◀ 10° LEFT' : '10° RIGHT ▶');
-    }
-  } else {
-    if (Math.abs(dy) > 28 && !tiltThrottleTimer) {
-      tiltThrottleTimer = setTimeout(() => { tiltThrottleTimer = null; }, 180);
-      const act = dy < 0 ? 'up' : 'down';
-      sendTiltAction(act);
-      showIndicator(act === 'up' ? '▲ 10° UP' : '▼ 10° DOWN');
-    }
-  }
-}
-
-function handleSwipeEnd() {
-  if (isTouching) {
-    isTouching = false;
-    currentSwipeAction = null;
-    setTimeout(hideIndicator, 350);
-  }
-}
-
-touchArea.addEventListener('touchstart', e => {
-  if (e.touches.length === 1) {
-    touchStartX = e.touches[0].clientX;
-    touchStartY = e.touches[0].clientY;
-    isTouching = true;
-    currentSwipeAction = null;
-  }
-}, {passive: false});
-
-touchArea.addEventListener('touchmove', e => {
-  if (!isTouching || e.touches.length !== 1) return;
-  e.preventDefault();
-  handleSwipeMove(e.touches[0].clientX, e.touches[0].clientY);
-}, {passive: false});
-
-touchArea.addEventListener('touchend', handleSwipeEnd);
-touchArea.addEventListener('touchcancel', handleSwipeEnd);
-
-// Mouse dragging support on desktop:
-touchArea.addEventListener('mousedown', e => {
-  touchStartX = e.clientX;
-  touchStartY = e.clientY;
-  isTouching = true;
-  currentSwipeAction = null;
-});
-
-window.addEventListener('mousemove', e => {
-  if (!isTouching) return;
-  handleSwipeMove(e.clientX, e.clientY);
-});
-
-window.addEventListener('mouseup', handleSwipeEnd);
-</script>
-</body>
-</html>
-"""
-
-class RequestHandler(BaseHTTPRequestHandler):
-    def log_message(self, format, *args):
-        pass
-
-    def _send_cors(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def _c(self):
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
     def do_OPTIONS(self):
-        self.send_response(200)
-        self._send_cors()
-        self.end_headers()
-
+        self.send_response(200); self._c(); self.end_headers()
     def do_GET(self):
-        if self.path in ("/", "/index.html"):
-            self.send_response(200)
-            self._send_cors()
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(HTML_PAGE.encode("utf-8"))
+        if self.path in ('/api/status', '/status', '/api/telemetry', '/telemetry'):
+            self.send_response(200); self._c(); self.send_header('Content-Type', 'application/json'); self.end_headers()
+            payload = {
+                'status': 'ok',
+                'pan': current_pan,
+                'tilt': current_tilt,
+                'pan_pw': current_pan_pw,
+                'tilt_pw': current_tilt_pw,
+                'plotter': f"Pan_Angle:{current_pan},Tilt_Angle:{current_tilt},Pan_us:{current_pan_pw},Tilt_us:{current_tilt_pw}"
+            }
+            self.wfile.write(json.dumps(payload).encode())
             return
-
-        if self.path == "/api/status":
-            self.send_response(200)
-            self._send_cors()
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            resp = {"tilt": current_tilt, "pan": current_pan, "status": "ok"}
-            self.wfile.write(json.dumps(resp).encode("utf-8"))
-            return
-
-        if self.path == "/api/pan":
-            self.send_response(200)
-            self._send_cors()
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"angle": current_pan}).encode("utf-8"))
-            return
-
-        if self.path == "/api/tilt":
-            self.send_response(200)
-            self._send_cors()
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"angle": current_tilt}).encode("utf-8"))
-            return
-
-        if self.path.startswith("/snapshot"):
+        if self.path.startswith('/snapshot'):
             try:
-                upstream = urllib.request.urlopen("http://127.0.0.1:8000/snapshot", timeout=3)
-                self.send_response(200)
-                self._send_cors()
-                self.send_header("Content-Type", "image/jpeg")
-                self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
-                self.end_headers()
-                self.wfile.write(upstream.read())
-            except Exception:
-                self.send_error(502, "Snapshot unavailable")
+                up = urllib.request.urlopen('http://127.0.0.1:8000/snapshot', timeout=3)
+                self.send_response(200); self._c(); self.send_header('Content-Type', 'image/jpeg'); self.end_headers()
+                self.wfile.write(up.read())
+            except Exception: self.send_error(502)
             return
-
-        if self.path.startswith("/stream"):
+        if self.path.startswith('/stream'):
             try:
-                upstream = urllib.request.urlopen("http://127.0.0.1:8000/stream", timeout=4)
-                self.send_response(200)
-                self._send_cors()
-                for header, value in upstream.getheaders():
-                    if header.lower() not in ("server", "transfer-encoding"):
-                        self.send_header(header, value)
-                self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
-                self.send_header("Pragma", "no-cache")
-                self.send_header("Expires", "0")
+                up = urllib.request.urlopen('http://127.0.0.1:8000/stream', timeout=4)
+                self.send_response(200); self._c()
+                for k, v in up.getheaders():
+                    if k.lower() not in ('server', 'transfer-encoding'): self.send_header(k, v)
                 self.end_headers()
                 while True:
-                    chunk = upstream.read(4096)
-                    if not chunk: break
-                    self.wfile.write(chunk)
-                    self.wfile.flush()
-            except Exception:
-                self.send_error(502, "Stream unavailable")
+                    c = up.read(4096)
+                    if not c: break
+                    self.wfile.write(c); self.wfile.flush()
+            except Exception: self.send_error(502)
             return
-
-        self.send_error(404)
-
+        for html_path in ['/home/i4mt/www/index.html', '/home/i4mt/index.html', os.path.join(os.path.dirname(__file__), 'index.html')]:
+            if os.path.exists(html_path):
+                try:
+                    with open(html_path, 'rb') as hf:
+                        content = hf.read()
+                    self.send_response(200); self._c(); self.send_header('Content-Type', 'text/html; charset=utf-8'); self.end_headers()
+                    self.wfile.write(content)
+                    return
+                except Exception: pass
+        self.send_response(200); self._c(); self.end_headers(); self.wfile.write(b'FishFinder Arm Server OK')
     def do_POST(self):
-        length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
-        try:
-            data = json.loads(body)
-        except Exception:
-            data = {}
-
-        if self.path == "/api/pan":
-            dur = float(data.get("duration", 0))
-            duration = dur if dur > 0 else None
-            left_pw = int(data.get("left_pw", 600))
-            right_pw = int(data.get("right_pw", 2400))
-
-            if "angle" in data:
-                raw_angle = float(data["angle"])
-                set_pan(raw_angle, duration=duration)
-            elif "action" in data:
-                act = str(data["action"]).lower()
-                set_pan(act, duration=duration, left_pw=left_pw, right_pw=right_pw)
-            else:
-                set_pan("stop")
-
-            self.send_response(200)
-            self._send_cors()
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"status": "ok", "pan": current_pan, "tilt": current_tilt}).encode("utf-8"))
+        l = int(self.headers.get('Content-Length', 0))
+        b = json.loads(self.rfile.read(l).decode('utf-8')) if l else {}
+        if self.path == '/api/pan':
+            set_pan(b)
+            self.send_response(200); self._c(); self.send_header('Content-Type', 'application/json'); self.end_headers()
+            self.wfile.write(json.dumps({'status': 'ok', 'pan': current_pan, 'tilt': current_tilt, 'pan_pw': current_pan_pw}).encode())
             return
-
-        if self.path == "/api/tilt":
-            if "angle" in data:
-                set_tilt(data["angle"])
-            elif "action" in data:
-                act = str(data["action"]).lower()
-                if act == "up":
-                    set_tilt(target_tilt + 5)
-                elif act == "down":
-                    set_tilt(target_tilt - 5)
-                elif act == "center":
-                    set_tilt(90)
-
-            self.send_response(200)
-            self._send_cors()
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"status": "ok", "pan": current_pan, "tilt": round(current_tilt, 1), "target_tilt": target_tilt}).encode("utf-8"))
+        if self.path == '/api/tilt':
+            set_tilt(b)
+            self.send_response(200); self._c(); self.send_header('Content-Type', 'application/json'); self.end_headers()
+            self.wfile.write(json.dumps({'status': 'ok', 'pan': current_pan, 'tilt': current_tilt, 'tilt_pw': current_tilt_pw}).encode())
             return
-
         self.send_error(404)
 
-def run():
-    server = ThreadingHTTPServer(("0.0.0.0", 8080), RequestHandler)
-    print("FishFinder Arm Controller running on port 8080 (Idle Auto-Sleep active)...")
-    try:
-        server.serve_forever()
+if __name__ == '__main__':
+    s = ThreadingHTTPServer(('0.0.0.0', 8080), H)
+    print('FishFinder Arm running on 8080 (Zero-Jitter Smooth 10° Servo Controller Active)...', flush=True)
+    try: s.serve_forever()
     finally:
-        lgpio.gpiochip_close(h)
-
-if __name__ == "__main__":
-    run()
+        if pi_hw and pi_hw.connected:
+            pi_hw.stop()
+        if lgpio and h is not None:
+            lgpio.gpiochip_close(h)
