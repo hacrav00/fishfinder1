@@ -104,10 +104,21 @@ def deg_to_pw(deg):
     clamped = max(0.0, min(180.0, float(deg)))
     return int(round(1000.0 + (clamped / 180.0) * 1000.0))
 
+# Persistent serial outputs for GPIO 14/15 UART (/dev/serial0) and USB
+serial_fds = []
+for sp in ['/dev/serial0', '/dev/ttyUSB0', '/dev/ttyACM0']:
+    if os.path.exists(sp):
+        try:
+            os.system(f"stty -F {sp} 115200 raw -echo 2>/dev/null")
+            f = open(sp, 'w', buffering=1)
+            serial_fds.append(f)
+        except Exception:
+            pass
+
 def broadcast_telemetry(p_deg, t_deg, p_pw=None, t_pw=None):
     """
     Sends real-time telemetry formatted for Arduino IDE Serial Monitor & Serial Plotter:
-    - Over USB/UART Serial to connected ESP (/dev/ttyUSB0, /dev/ttyACM0, /dev/serial0) at 115200 baud
+    - Over GPIO 14/15 Hardware UART (/dev/serial0) and USB Serial at 115200 baud
     - Over Wi-Fi UDP broadcast (port 8888) for wireless ESP monitoring
     - Format: Pan_Angle:90,Tilt_Angle:90,Pan_us:1500,Tilt_us:1500
     """
@@ -128,17 +139,13 @@ def broadcast_telemetry(p_deg, t_deg, p_pw=None, t_pw=None):
         except Exception:
             pass
 
-    # 2. Serial write to USB-connected ESP (set 115200 baud)
-    for sp in ['/dev/ttyUSB0', '/dev/ttyACM0', '/dev/serial0', '/dev/ttyAMA0']:
-        if os.path.exists(sp):
-            try:
-                os.system(f"stty -F {sp} 115200 raw -echo 2>/dev/null")
-                with open(sp, 'w') as sf:
-                    sf.write(line)
-                    sf.flush()
-            except Exception:
-                pass
-            break
+    # 2. Write to open serial ports (GPIO 14/15 UART & USB) with zero latency
+    for sf in serial_fds:
+        try:
+            sf.write(line)
+            sf.flush()
+        except Exception:
+            pass
 
 def set_pan(data):
     """
@@ -202,7 +209,7 @@ def set_pan(data):
         def _sleep_pan():
             stop_pwm(PAN_PIN)
 
-        pan_sleep_timer = threading.Timer(0.7, _sleep_pan)
+        pan_sleep_timer = threading.Timer(0.35, _sleep_pan)
         pan_sleep_timer.daemon = True
         pan_sleep_timer.start()
 
@@ -263,7 +270,7 @@ def set_tilt(data):
         def _sleep_tilt():
             stop_pwm(TILT_PIN)
 
-        tilt_sleep_timer = threading.Timer(0.7, _sleep_tilt)
+        tilt_sleep_timer = threading.Timer(0.35, _sleep_tilt)
         tilt_sleep_timer.daemon = True
         tilt_sleep_timer.start()
 
@@ -313,6 +320,15 @@ class H(BaseHTTPRequestHandler):
                     self.wfile.write(c); self.wfile.flush()
             except Exception: self.send_error(502)
             return
+        for html_path in ['/home/i4mt/www/index.html', '/home/i4mt/index.html', os.path.join(os.path.dirname(__file__), 'index.html')]:
+            if os.path.exists(html_path):
+                try:
+                    with open(html_path, 'rb') as hf:
+                        content = hf.read()
+                    self.send_response(200); self._c(); self.send_header('Content-Type', 'text/html; charset=utf-8'); self.end_headers()
+                    self.wfile.write(content)
+                    return
+                except Exception: pass
         self.send_response(200); self._c(); self.end_headers(); self.wfile.write(b'FishFinder Arm Server OK')
     def do_POST(self):
         l = int(self.headers.get('Content-Length', 0))
