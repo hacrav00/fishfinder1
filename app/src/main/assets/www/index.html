@@ -693,7 +693,7 @@
     </div>
     <div class="header-right">
       <button class="btn-top accent" onclick="autoDiscoverRov(true)">🔍 Auto-Find</button>
-      <button class="btn-top" onclick="openIpModal()">🌐 <span id="btn-ip-lbl">192.168.150.131</span></button>
+      <button class="btn-top" onclick="openIpModal()">🌐 <span id="btn-ip-lbl">192.168.1.42</span></button>
       <button class="btn-top active" id="btn-touch-top" onclick="toggleTouchSwipeLock()" title="Activate or Deactivate Touchscreen Hand Control"><span id="ico-touch-top">👆</span> <span id="lbl-touch-top">Touch ON</span></button>
       <button class="btn-top" onclick="cycleHandGrip()" title="Flip Screen for Left/Right Hand Grip">📱 <span id="btn-grip-lbl">L-Cam</span></button>
       <button class="btn-top" onclick="recenterAll()">⨁ Center (<span id="hdr-center-lbl">92°</span>)</button>
@@ -1032,7 +1032,7 @@
         <button class="preset-btn" onclick="selectPresetIp('192.168.50.1')">🔌 Direct (.50.1)</button>
         <button class="preset-btn" onclick="selectPresetIp('i4mt.local')">🌐 i4mt.local</button>
       </div>
-      <input type="text" id="ip-input-field" class="ip-input" value="192.168.150.131" placeholder="192.168.150.131">
+      <input type="text" id="ip-input-field" class="ip-input" value="192.168.1.42" placeholder="192.168.1.42">
       <div id="scan-progress" style="font-size:11px; color:var(--accent); margin-bottom:10px; min-height:15px;"></div>
       <div class="ip-actions">
         <button class="btn-dialog" onclick="autoDiscoverRov(true)">🔍 Auto-Scan All</button>
@@ -1047,7 +1047,7 @@
 
 <script>
 // ── State Management ────────────────────────────────────────────────────────
-let hostIp = localStorage.getItem("rov_ip") || "192.168.150.131";
+let hostIp = localStorage.getItem("rov_ip") || "192.168.1.42";
 let isConnected = false;
 let isScanning = false;
 let lastPanSent = 90;
